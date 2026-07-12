@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <meta name="theme-color" content="#060606" />
+  <title>Peer — P2P Messenger by Saleh</title>
+  <meta name="description" content="A serverless peer-to-peer messenger over WebRTC. Messages travel directly between browsers." />
+  <link rel="icon" href="../../favicon.svg" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <a class="back" href="../../">← saleh.im</a>
+
+  <!-- LOGIN -->
+  <section id="login" class="screen active">
+    <div class="card">
+      <div class="brand">
+        <span class="logo">P</span>
+        <div>
+          <h1>Peer</h1>
+          <p class="muted">Serverless P2P messenger · WebRTC</p>
+        </div>
+      </div>
+      <form id="login-form" autocomplete="off">
+        <label>Username
+          <input id="username" type="text" placeholder="e.g. saleh" required minlength="3" maxlength="24" />
+        </label>
+        <label>Password
+          <input id="password" type="password" placeholder="your secret" required minlength="4" />
+        </label>
+        <button class="btn primary" type="submit">Sign in &amp; go online</button>
+        <p class="hint" id="login-hint">Your ID is derived from these credentials — share your username so a friend can connect. No server stores anything.</p>
+      </form>
+    </div>
+  </section>
+
+  <!-- APP -->
+  <section id="app" class="screen">
+    <aside class="sidebar">
+      <div class="me">
+        <span class="avatar" id="me-avatar">S</span>
+        <div class="me-info">
+          <strong id="me-name">…</strong>
+          <span class="status" id="me-status"><i class="dot"></i> connecting…</span>
+        </div>
+        <button id="logout" class="icon-btn" title="Sign out">⎋</button>
+      </div>
+
+      <div class="connect-box">
+        <p class="label">Connect to a peer</p>
+        <div class="row">
+          <input id="peer-id" type="text" placeholder="friend's username" autocomplete="off" />
+          <button id="connect-btn" class="btn primary sm">Connect</button>
+        </div>
+        <p class="hint">Share your username <b id="my-share">…</b> for others to reach you.</p>
+      </div>
+
+      <div class="peers">
+        <p class="label">Conversations</p>
+        <ul id="peer-list"></ul>
+      </div>
+    </aside>
+
+    <main class="chat">
+      <header class="chat-head">
+        <div>
+          <strong id="chat-title">No conversation</strong>
+          <span class="status" id="chat-status">Select or start a chat</span>
+        </div>
+        <span class="badge" id="rtc-badge">P2P · encrypted transport</span>
+      </header>
+
+      <div id="messages" class="messages">
+        <div class="empty" id="empty-state">
+          <div class="empty-icon">🔗</div>
+          <p>Connect to a peer by their username to start a direct, browser-to-browser chat.</p>
+        </div>
+      </div>
+
+      <form id="send-form" class="composer" autocomplete="off">
+        <input id="msg-input" type="text" placeholder="Type a message…" disabled />
+        <button class="btn primary" type="submit" disabled id="send-btn">Send</button>
+      </form>
+    </main>
+  </section>
+
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

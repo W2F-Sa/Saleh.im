@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <meta name="theme-color" content="#000000" />
+  <title>Secret Chat — Triple-Layer E2EE by Saleh</title>
+  <meta name="description" content="Anti-surveillance secure chat with a 3-stage encryption pipeline. Ephemeral, zero-metadata, self-destructing." />
+  <link rel="icon" href="../../favicon.svg" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <a class="back" href="../../">← saleh.im</a>
+
+  <!-- SETUP -->
+  <section id="setup" class="screen active">
+    <div class="card">
+      <div class="brand">
+        <span class="logo">🔐</span>
+        <div>
+          <h1>Secret Chat</h1>
+          <p class="muted">Triple-layer E2EE · anti-tracking</p>
+        </div>
+      </div>
+
+      <div class="layers">
+        <span class="layer">1 · AES-256-GCM</span>
+        <span class="arrow">→</span>
+        <span class="layer">2 · AES-256-GCM</span>
+        <span class="arrow">→</span>
+        <span class="layer">3 · HMAC stream</span>
+      </div>
+
+      <form id="setup-form" autocomplete="off">
+        <label>Your handle
+          <input id="handle" type="text" placeholder="alias (not stored)" required maxlength="24" />
+        </label>
+        <label>Room ID <span class="muted">— both peers must match</span>
+          <div class="row">
+            <input id="room" type="text" placeholder="shared room name" required />
+            <button type="button" id="gen-room" class="btn sm" title="Random room">🎲</button>
+          </div>
+        </label>
+        <label>Shared secret <span class="muted">— the encryption passphrase</span>
+          <input id="secret" type="password" placeholder="never sent over the wire" required minlength="6" />
+        </label>
+        <button class="btn primary" type="submit">Establish secure channel</button>
+        <p class="hint">The secret and handle never leave your device. Keys are derived locally (PBKDF2, 250k rounds) and destroyed when you close the tab. Nothing is logged.</p>
+      </form>
+    </div>
+  </section>
+
+  <!-- CHAT -->
+  <section id="chat" class="screen">
+    <header class="chat-head">
+      <div>
+        <strong id="room-name">room</strong>
+        <span class="status" id="conn-status"><i class="dot"></i> waiting for peer…</span>
+      </div>
+      <div class="head-actions">
+        <span class="lock" id="lock-badge" title="3-layer encryption active">🔒 3-layer</span>
+        <button id="burn" class="btn sm danger" title="Destroy session">Burn</button>
+      </div>
+    </header>
+
+    <div class="secure-bar" id="secure-bar">
+      <span>● No metadata</span><span>● Ephemeral keys</span><span>● Padded ciphertext</span>
+      <label class="destruct">
+        <input type="checkbox" id="self-destruct" /> self-destruct 60s
+      </label>
+    </div>
+
+    <div id="messages" class="messages">
+      <div class="sys-msg">Channel opening. Share the <b>Room ID</b> and <b>secret</b> with your peer through a trusted channel.</div>
+    </div>
+
+    <form id="send-form" class="composer" autocomplete="off">
+      <input id="msg-input" type="text" placeholder="Encrypted message…" disabled />
+      <button class="btn primary" type="submit" id="send-btn" disabled>Send</button>
+    </form>
+  </section>
+
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="./crypto.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
