@@ -49,7 +49,7 @@ export const metadata: Metadata = {
     siteName: "saleh.im",
     type: "website",
   },
-  icons: { icon: "/favicon.svg" },
+  icons: { icon: `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/favicon.svg` },
 };
 
 export const viewport: Viewport = {

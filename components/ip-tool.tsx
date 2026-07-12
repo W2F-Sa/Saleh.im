@@ -20,7 +20,8 @@ type IpInfo = {
 
 async function fetchIpInfo(): Promise<IpInfo> {
   try {
-    const res = await fetch("/api/ip", { cache: "no-store" });
+    const bp = process.env.NEXT_PUBLIC_BASE_PATH || "";
+    const res = await fetch(`${bp}/api/ip`, { cache: "no-store" });
     if (res.ok) {
       const data = await res.json();
       if (data && data.ip) return { ...data, source: data.source || "saleh.im/api" };

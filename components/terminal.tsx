@@ -75,7 +75,8 @@ function runCommand(raw: string): string[] {
       return [args.join(" ")];
     case "open":
       if (/messeng|chat|cipher/i.test(args[0] || "")) {
-        if (typeof window !== "undefined") window.open("/apps/messenger/", "_blank");
+        if (typeof window !== "undefined")
+          window.open(`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/apps/messenger/`, "_blank");
         return ["opening Cipher messenger in a new tab…"];
       }
       return [`open: unknown app '${args[0] || ""}'. try: open messenger`];

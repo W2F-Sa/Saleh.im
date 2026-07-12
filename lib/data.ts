@@ -3,6 +3,9 @@
  * public GitHub profile: github.com/W2F-Sa
  */
 
+/** Prefix for internal assets/apps (set on GitHub Pages, empty elsewhere). */
+export const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
 export const profile = {
   name: "Saleh Saghafiani",
   nameFa: "محمدصالح ثقفیانی",
@@ -174,7 +177,7 @@ export const projects: Project[] = [
     description:
       "One messenger, two modes. P2P mode keeps an encrypted, on-device history; Secret mode is fully ephemeral and stores nothing. Every message runs through a heavy multi-layer encryption pipeline before it leaves the browser.",
     tags: ["WebRTC", "WebCrypto", "P2P", "E2E", "Zero-metadata"],
-    href: "/apps/messenger/",
+    href: `${BASE_PATH}/apps/messenger/`,
     year: "2026",
     featured: true,
     internal: true,
