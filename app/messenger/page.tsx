@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useLang } from "@/components/lang-provider";
 import { useThemeScene } from "@/components/theme-provider";
 import { LangToggle } from "@/components/lang-toggle";
+import { Logo } from "@/components/logo";
 import { BASE_PATH } from "@/lib/data";
 import {
   deriveShared,
@@ -782,8 +783,8 @@ export default function MessengerPage() {
       <header className="flex items-center justify-between gap-3 border-b px-4 py-3" style={{ borderColor: "var(--line)", background: "var(--bg-2)" }}>
         <div className="flex items-center gap-3">
           <Link href="/" className="mono text-sm text-[var(--fg-2)] hover:text-[var(--fg)]">← saleh.im</Link>
-          <span className="hidden items-center gap-2 sm:flex">
-            <span className="grid h-7 w-7 place-items-center rounded-lg text-sm" style={{ background: "var(--accent)", color: "var(--on-accent)" }}>◆</span>
+          <span className="hidden items-center gap-2.5 sm:flex">
+            <Logo size={28} />
             <span className="font-display text-lg">{T.title}</span>
           </span>
         </div>

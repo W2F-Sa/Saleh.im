@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useLang } from "@/components/lang-provider";
 import { useThemeScene } from "@/components/theme-provider";
 import { LangToggle } from "@/components/lang-toggle";
+import { Logo } from "@/components/logo";
 
 /* ============================================================================
    Lumen — a real-time markets dashboard powered by the public CoinGecko API.
@@ -259,7 +260,7 @@ export default function LumenPage() {
       <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b px-4 py-3 backdrop-blur-xl sm:px-6" style={{ borderColor: "var(--line)", background: "color-mix(in srgb, var(--bg) 80%, transparent)" }}>
         <div className="flex items-center gap-3">
           <Link href="/" className="mono text-sm text-[var(--fg-2)] hover:text-[var(--fg)]">← saleh.im</Link>
-          <span className="hidden items-center gap-2 sm:flex"><span className="grid h-7 w-7 place-items-center rounded-lg text-sm" style={{ background: "var(--accent)", color: "var(--on-accent)" }}>◎</span><span className="font-display text-lg">{T.title}</span><span className="text-xs text-[var(--fg-2)]">{T.sub}</span></span>
+          <span className="hidden items-center gap-2.5 sm:flex"><Logo size={28} /><span className="font-display text-lg">{T.title}</span><span className="text-xs text-[var(--fg-2)]">{T.sub}</span></span>
         </div>
         <div className="flex items-center gap-2">
           <select value={cur} onChange={(e) => setCur(e.target.value as Currency)} className="rounded-full border bg-transparent px-2.5 py-1.5 text-xs outline-none force-ltr" style={{ borderColor: "var(--line-2)" }}>

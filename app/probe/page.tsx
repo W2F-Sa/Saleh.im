@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useLang } from "@/components/lang-provider";
 import { useThemeScene } from "@/components/theme-provider";
 import { LangToggle } from "@/components/lang-toggle";
+import { Logo } from "@/components/logo";
 import {
   resolveGeo,
   resolveTls,
@@ -495,10 +496,8 @@ export default function ProbePage() {
           <Link href="/" className="mono text-sm text-[var(--fg-2)] hover:text-[var(--fg)]">
             ← saleh.im
           </Link>
-          <span className="hidden items-center gap-2 sm:flex">
-            <span className="grid h-7 w-7 place-items-center rounded-lg text-sm" style={{ background: "var(--accent)", color: "var(--on-accent)" }}>
-              ◉
-            </span>
+          <span className="hidden items-center gap-2.5 sm:flex">
+            <Logo size={28} />
             <span className="font-display text-lg">{T.title}</span>
             <span className="text-xs text-[var(--fg-2)]">{T.sub}</span>
           </span>
@@ -540,6 +539,7 @@ export default function ProbePage() {
           ))}
         </div>
 
+        <div key={tab} className="tab-anim">
         {/* ============================= INTEL ============================= */}
         {tab === "intel" && (
           <div className="grid gap-4 lg:grid-cols-2">
@@ -550,9 +550,9 @@ export default function ProbePage() {
               {trueCc ? (
                 <>
                   <div className="flex items-center gap-4">
-                    <span className="text-5xl leading-none">{ccFlag(trueCc)}</span>
-                    <div>
-                      <p className="font-display text-3xl">{ccName(trueCc, fa)}</p>
+                    <span className="shrink-0 text-5xl leading-none">{ccFlag(trueCc)}</span>
+                    <div className="min-w-0">
+                      <p className="font-display text-2xl leading-tight break-words sm:text-3xl">{ccName(trueCc, fa)}</p>
                       <p className="mono text-xs text-[var(--fg-2)]">{trueCc}</p>
                     </div>
                   </div>
@@ -603,7 +603,7 @@ export default function ProbePage() {
             {/* Hashes */}
             <div className="panel elev p-5">
               <p className="label mb-4">{T.deviceHash}</p>
-              <p className="font-display text-2xl force-ltr" style={{ color: "var(--accent)", letterSpacing: "0.08em" }}>
+              <p className="font-display text-xl force-ltr break-all sm:text-2xl" style={{ color: "var(--accent)", letterSpacing: "0.05em" }}>
                 {devHash ? groupHash(devHash, 4, 4) : "…"}
               </p>
               <div className="mt-4 grid gap-3">
@@ -754,7 +754,7 @@ export default function ProbePage() {
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="panel elev p-5">
               <p className="label mb-4">{T.combined}</p>
-              <p className="font-display text-3xl force-ltr" style={{ color: "var(--accent)", letterSpacing: "0.1em" }}>
+              <p className="font-display text-xl force-ltr break-all sm:text-2xl" style={{ color: "var(--accent)", letterSpacing: "0.05em" }}>
                 {devHash ? groupHash(devHash, 5, 4) : "…"}
               </p>
               <p className="mt-3 text-xs text-[var(--fg-2)]">{T.fpNote}</p>
@@ -897,6 +897,7 @@ export default function ProbePage() {
             </div>
           </div>
         )}
+        </div>
 
         <p className="mt-6 flex items-center justify-center gap-2 text-center text-xs text-[var(--fg-2)]">
           <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#22c55e" }} />
@@ -909,9 +910,12 @@ export default function ProbePage() {
 
 function Field({ label, value, big, mono }: { label: string; value?: string; big?: boolean; mono?: boolean }) {
   return (
-    <div className="rounded-xl border px-4 py-3" style={{ borderColor: "var(--line)", background: "var(--bg-3)" }}>
+    <div className="min-w-0 rounded-xl border px-4 py-3" style={{ borderColor: "var(--line)", background: "var(--bg-3)" }}>
       <p className="label mb-1 truncate">{label}</p>
-      <p className={`${big ? "font-display text-xl" : "text-sm"} ${mono ? "mono" : ""} truncate force-ltr`} style={big ? { color: "var(--accent)" } : undefined}>
+      <p
+        className={`${big ? "font-display text-lg sm:text-xl" : "text-sm"} ${mono ? "mono break-all" : "break-words"} force-ltr leading-snug`}
+        style={big ? { color: "var(--accent)" } : undefined}
+      >
         {value || "…"}
       </p>
     </div>

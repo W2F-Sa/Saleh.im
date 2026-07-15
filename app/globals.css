@@ -632,3 +632,111 @@ textarea,
   box-shadow: 0 0 12px var(--glow);
   flex-shrink: 0;
 }
+
+
+/* =========================================================================
+   BRAND MARK + MOTION ADD-ONS
+   ========================================================================= */
+
+/* Logo: the live "prompt" node breathes gently; the whole mark carries a
+   faint accent glow that lifts on hover. */
+.logo-mark {
+  filter: drop-shadow(0 2px 6px color-mix(in srgb, var(--accent) 22%, transparent));
+  transition: filter 0.4s ease;
+}
+.logo-mark circle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: logoNode 2.8s ease-in-out infinite;
+}
+@keyframes logoNode {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+a:hover > .logo-mark,
+.logo-mark:hover {
+  filter: drop-shadow(0 4px 14px color-mix(in srgb, var(--accent) 45%, transparent));
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo-mark circle { animation: none; }
+}
+
+/* Marquee: pause when the visitor hovers a row (desktop nicety) */
+@media (pointer: fine) {
+  .marquee:hover { animation-play-state: paused; }
+}
+
+/* Tabbed panels fade + rise in when the active tab changes */
+.tab-anim {
+  animation: tabIn 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes tabIn {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Staggered card entrance for grids (compositor-only) */
+@keyframes popIn {
+  from { opacity: 0; transform: translate3d(0, 18px, 0) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Floating ambient orbs (footer / hero depth) */
+.floaty {
+  animation: floaty 12s ease-in-out infinite;
+  will-change: transform;
+}
+.floaty-slow {
+  animation: floaty 20s ease-in-out infinite;
+  animation-delay: -6s;
+  will-change: transform;
+}
+@keyframes floaty {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(0, -22px, 0) scale(1.08); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .floaty, .floaty-slow, .tab-anim { animation: none; }
+}
+
+/* Conic sheen that slowly rotates behind a hero/footer CTA */
+.conic-sheen {
+  position: absolute;
+  inset: -40%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    color-mix(in srgb, var(--accent) 16%, transparent) 70deg,
+    transparent 150deg,
+    color-mix(in srgb, var(--accent-2) 14%, transparent) 240deg,
+    transparent 320deg
+  );
+  filter: blur(40px);
+  opacity: 0.5;
+  animation: spin 26s linear infinite;
+  pointer-events: none;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .conic-sheen { animation: none; }
+}
+
+/* Utility: a hairline gradient card border that's always subtly on */
+.frame-grad {
+  position: relative;
+}
+.frame-grad::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(140deg, color-mix(in srgb, var(--accent) 40%, transparent), transparent 45%, transparent 60%, color-mix(in srgb, var(--accent-2) 34%, transparent));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.5;
+  pointer-events: none;
+}

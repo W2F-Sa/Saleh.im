@@ -89,47 +89,56 @@ export function Footer() {
 
   return (
     <footer className="relative mt-10 overflow-hidden border-t" style={{ borderColor: "var(--line)" }}>
-      {/* ambient glow */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px" style={{ background: "linear-gradient(90deg, transparent, var(--accent), transparent)", opacity: 0.4 }} />
-      <div className="pointer-events-none absolute -top-24 start-1/4 h-64 w-64 rounded-full aurora" style={{ background: "var(--accent)", opacity: 0.18 }} aria-hidden />
+      {/* ambient glow + floating orbs */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px" style={{ background: "linear-gradient(90deg, transparent, var(--accent), transparent)", opacity: 0.5 }} />
+      <div className="pointer-events-none absolute -top-28 start-[12%] h-72 w-72 rounded-full aurora floaty" style={{ background: "var(--accent)", opacity: 0.16 }} aria-hidden />
+      <div className="pointer-events-none absolute -top-16 end-[10%] h-56 w-56 rounded-full aurora floaty-slow" style={{ background: "var(--accent-2)", opacity: 0.14 }} aria-hidden />
 
-      <div className="wrap relative pt-20">
-        {/* CTA + availability */}
-        <div className="grid gap-10 lg:grid-cols-2 lg:gap-16">
-          <div>
-            <p className="label tag-dot">{t.kicker}</p>
-            <h2 className="display mt-5 text-5xl leading-[1.05] sm:text-6xl">
-              {t.headline1}
-              <br />
-              <span className="accent-text">{t.headline2}</span>
-            </h2>
-            <a href={`mailto:${profile.email}`} className="btn btn-accent mt-8 text-base">
-              {t.cta}
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <path d="M5 12h14M13 6l6 6-6 6" />
-              </svg>
-            </a>
-          </div>
-
-          <div className="panel self-start p-6 sm:p-7">
-            <div className="flex items-center justify-between">
-              <span className="label">{t.availTitle}</span>
-              <span className="flex items-center gap-2 text-sm">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-70" style={{ background: "#27c93f" }} />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full" style={{ background: "#27c93f" }} />
-                </span>
-                {t.avail}
-              </span>
-            </div>
-            <div className="mt-5 flex items-end justify-between border-t pt-5" style={{ borderColor: "var(--line)" }}>
-              <div>
-                <p className="label mb-1">{t.localTime}</p>
-                <p className="font-display text-3xl">
-                  <LocalClock fa={fa} />
-                </p>
+      <div className="wrap relative pt-16 sm:pt-20">
+        {/* CTA band */}
+        <div className="frame-grad panel relative overflow-hidden p-6 sm:p-10">
+          <div className="conic-sheen" aria-hidden />
+          <div className="relative grid gap-8 lg:grid-cols-2 lg:items-center lg:gap-14">
+            <div>
+              <p className="label tag-dot">{t.kicker}</p>
+              <h2 className="display mt-5 text-4xl leading-[1.05] sm:text-5xl lg:text-6xl">
+                {t.headline1}
+                <br />
+                <span className="accent-text">{t.headline2}</span>
+              </h2>
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <a href={`mailto:${profile.email}`} className="btn btn-accent text-base">
+                  {t.cta}
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                    <path d="M5 12h14M13 6l6 6-6 6" />
+                  </svg>
+                </a>
+                <a href={profile.telegramUrl} target="_blank" rel="noopener noreferrer" className="btn btn-outline text-base">
+                  {fa ? "تلگرام" : "Telegram"}
+                </a>
               </div>
-              <p className="max-w-[10rem] text-end text-xs text-[var(--fg-2)]">{t.reply}</p>
+            </div>
+
+            <div className="rounded-2xl border p-5 sm:p-6" style={{ borderColor: "var(--line)", background: "color-mix(in srgb, var(--bg-3) 60%, transparent)" }}>
+              <div className="flex items-center justify-between gap-3">
+                <span className="label">{t.availTitle}</span>
+                <span className="flex items-center gap-2 text-sm">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-70" style={{ background: "#27c93f" }} />
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full" style={{ background: "#27c93f" }} />
+                  </span>
+                  {t.avail}
+                </span>
+              </div>
+              <div className="mt-5 flex items-end justify-between gap-4 border-t pt-5" style={{ borderColor: "var(--line)" }}>
+                <div>
+                  <p className="label mb-1">{t.localTime}</p>
+                  <p className="font-display text-2xl sm:text-3xl">
+                    <LocalClock fa={fa} />
+                  </p>
+                </div>
+                <p className="max-w-[9rem] text-end text-xs text-[var(--fg-2)]">{t.reply}</p>
+              </div>
             </div>
           </div>
         </div>

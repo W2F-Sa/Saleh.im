@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ThemePicker } from "./theme-picker";
 import { LangToggle } from "./lang-toggle";
 import { useLang } from "./lang-provider";
+import { Logo } from "./logo";
 
 export function Navbar() {
   const { t } = useLang();
@@ -45,9 +46,7 @@ export function Navbar() {
       >
         <nav className="wrap flex h-16 items-center justify-between">
           <a href="#top" className="group flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-lg font-display text-lg font-semibold" style={{ background: "var(--accent)", color: "var(--on-accent)" }}>
-              S
-            </span>
+            <Logo size={34} className="transition-transform duration-300 group-hover:rotate-[-6deg] group-hover:scale-105" />
             <span className="font-display text-lg font-semibold tracking-tight force-ltr">
               saleh<span className="accent-text">.</span>im
             </span>

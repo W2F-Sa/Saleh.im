@@ -69,6 +69,24 @@ function ConnectionChip() {
   );
 }
 
+/* A single seamless marquee row. The base sequence is repeated enough times
+   that one half always exceeds the viewport, so the -50% loop never exposes a
+   gap on wide screens; the row simply re-enters from the opposite edge. */
+function MarqueeRow({ duration, reverse = false, muted = false }: { duration: number; reverse?: boolean; muted?: boolean }) {
+  const base = [...marqueeTags, ...marqueeTags, ...marqueeTags];
+  const track = [...base, ...base];
+  return (
+    <div className={`marquee ${reverse ? "rev" : ""}`} style={{ animationDuration: `${duration}s` }} aria-hidden>
+      {track.map((m, i) => (
+        <span key={i} className={`mx-5 font-display text-2xl sm:text-3xl text-[var(--fg-2)] ${muted ? "opacity-45" : ""}`}>
+          {m}
+          <span className="accent-text mx-5">✦</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export function Hero() {
   const { t, lang } = useLang();
   const [idx, setIdx] = useState(0);
@@ -179,16 +197,10 @@ export function Hero() {
         </div>
       </div>
 
-      {/* marquee */}
-      <div className="edge-fade mt-16 border-y py-4" style={{ borderColor: "var(--line)" }}>
-        <div className="marquee">
-          {[...marqueeTags, ...marqueeTags].map((m, i) => (
-            <span key={i} className="mx-5 font-display text-2xl text-[var(--fg-2)] sm:text-3xl">
-              {m}
-              <span className="accent-text mx-5">✦</span>
-            </span>
-          ))}
-        </div>
+      {/* marquee — two counter-scrolling rows, seamless on any width */}
+      <div className="edge-fade mt-16 space-y-1 border-y py-4" style={{ borderColor: "var(--line)" }}>
+        <MarqueeRow duration={44} />
+        <MarqueeRow duration={64} reverse muted />
       </div>
 
       <style jsx>{`

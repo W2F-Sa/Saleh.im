@@ -4,8 +4,12 @@ export const LANGS: Lang[] = ["en", "fa"];
 export const DEFAULT_LANG: Lang = "en";
 export const LANG_KEY = "saleh-lang";
 
-/** Runs before paint so the correct lang/dir/theme is set with no flash. */
-export const NO_FLASH_LANG = `(function(){try{var l=localStorage.getItem('${LANG_KEY}');if(l!=='fa'&&l!=='en'){l='${DEFAULT_LANG}';}document.documentElement.setAttribute('lang',l);document.documentElement.setAttribute('dir',l==='fa'?'rtl':'ltr');}catch(e){document.documentElement.setAttribute('lang','${DEFAULT_LANG}');document.documentElement.setAttribute('dir','ltr');}})();`;
+/**
+ * Runs before paint. The site always boots in English (LTR) — Persian is
+ * available via the in-page toggle but is never restored as the initial
+ * language, so every fresh load of the main page starts in English.
+ */
+export const NO_FLASH_LANG = `(function(){try{document.documentElement.setAttribute('lang','${DEFAULT_LANG}');document.documentElement.setAttribute('dir','ltr');}catch(e){}})();`;
 
 type Dict = {
   nav: { about: string; skills: string; journey: string; work: string; shell: string; contact: string; menu: string };
