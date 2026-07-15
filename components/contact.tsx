@@ -17,8 +17,11 @@ export function Contact() {
     <section id="contact" className="relative scroll-mt-24 py-24 sm:py-32">
       <div className="wrap">
         <Reveal>
-          <div className="relative overflow-hidden rounded-3xl p-8 sm:p-14" style={{ background: "var(--bg-2)", border: "1px solid var(--line)" }}>
-            <div className="pointer-events-none absolute -end-20 -top-20 h-64 w-64 rounded-full aurora" style={{ background: "var(--accent)", opacity: 0.3 }} aria-hidden />
+          <div className="panel elev frame-grad relative overflow-hidden p-8 sm:p-14">
+            <div className="conic-sheen" aria-hidden style={{ opacity: 0.16 }} />
+            <div className="pointer-events-none absolute -end-20 -top-20 h-64 w-64 rounded-full aurora floaty" style={{ background: "var(--accent)", opacity: 0.28 }} aria-hidden />
+            <div className="pointer-events-none absolute -start-16 bottom-0 h-56 w-56 rounded-full aurora floaty-slow" style={{ background: "var(--accent-2)", opacity: 0.16 }} aria-hidden />
+            <span className="section-index pointer-events-none absolute end-4 top-2 select-none sm:end-8" aria-hidden>06</span>
             <div className="relative">
               <p className="label">{t.contact.eyebrow}</p>
               <h2 className="display mt-4 max-w-3xl text-5xl leading-tight sm:text-7xl">
@@ -28,23 +31,25 @@ export function Contact() {
               </h2>
               <p className="mt-6 max-w-xl text-lg text-[var(--fg-2)]">{t.contact.sub}</p>
 
-              <div className="mt-10 grid gap-px overflow-hidden rounded-2xl sm:grid-cols-3" style={{ background: "var(--line)" }}>
-                {channels.map((c) => (
+              <div className="mt-10 grid gap-3 sm:grid-cols-3">
+                {channels.map((c, i) => (
                   <a
                     key={c.label}
                     href={c.href}
                     target={c.ext ? "_blank" : undefined}
                     rel="noopener noreferrer"
-                    className="group flex flex-col gap-2 p-6 transition-colors"
-                    style={{ background: "var(--bg-2)" }}
+                    className="group relative flex flex-col gap-2 rounded-2xl border p-6 lift glow-border sheen"
+                    style={{ background: "var(--bg-3)", borderColor: "var(--line)", animation: "popIn .5s cubic-bezier(.22,1,.36,1) both", animationDelay: `${i * 80}ms` }}
                   >
                     <span className="label">{c.label}</span>
-                    <span className="font-display text-xl force-ltr">{c.value}</span>
-                    <span className="mono mt-2 flex items-center gap-1.5 text-sm text-[var(--fg-2)] transition-colors group-hover:text-[var(--accent)]">
-                      {c.cta}
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="transition-transform group-hover:translate-x-1">
-                        <path d="M5 12h14M13 6l6 6-6 6" />
-                      </svg>
+                    <span className="font-display text-xl force-ltr transition-colors group-hover:text-[var(--accent)]">{c.value}</span>
+                    <span className="mono mt-2 flex items-center justify-between text-sm text-[var(--fg-2)]">
+                      <span className="transition-colors group-hover:text-[var(--fg)]">{c.cta}</span>
+                      <span className="grid h-8 w-8 place-items-center rounded-full border transition-all duration-300 group-hover:border-transparent group-hover:bg-[var(--accent)] group-hover:text-[var(--on-accent)]" style={{ borderColor: "var(--line-2)" }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5">
+                          <path d={c.ext ? "M7 17 17 7M8 7h9v9" : "M5 12h14M13 6l6 6-6 6"} />
+                        </svg>
+                      </span>
                     </span>
                   </a>
                 ))}

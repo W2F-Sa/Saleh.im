@@ -234,16 +234,39 @@ body {
     background: var(--bg-2);
     border: 1px solid var(--line);
     border-radius: 1.25rem;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 24px 50px -34px var(--shadow);
+    /* precise, layered elevation — a crisp contact shadow plus a soft ambient one */
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.04),
+      0 1px 2px -1px var(--shadow),
+      0 10px 20px -12px var(--shadow),
+      0 28px 56px -28px var(--shadow);
   }
   .elev {
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 30px 60px -30px var(--shadow);
-    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s ease;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 2px 6px -2px var(--shadow),
+      0 14px 28px -14px var(--shadow),
+      0 34px 64px -30px var(--shadow);
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform;
   }
   .elev:hover {
+    transform: translateY(-5px);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.07),
+      0 4px 10px -3px var(--shadow),
+      0 20px 40px -16px var(--shadow),
+      0 48px 90px -28px var(--shadow),
+      0 0 70px -32px var(--glow);
+  }
+  /* opt-in hover lift for cards that aren't full .elev panels */
+  .lift {
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease;
+    will-change: transform;
+  }
+  .lift:hover {
     transform: translateY(-4px);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 40px 80px -28px var(--shadow),
-      0 0 60px -30px var(--glow);
+    box-shadow: 0 24px 48px -22px var(--shadow), 0 0 50px -30px var(--glow);
   }
 }
 

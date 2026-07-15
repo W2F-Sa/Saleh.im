@@ -15,8 +15,10 @@ export function Skills() {
     lang === "fa" ? n.toLocaleString("fa-IR") : String(n);
 
   return (
-    <section id="skills" className="relative scroll-mt-24 py-24 sm:py-32">
-      <div className="wrap">
+    <section id="skills" className="relative scroll-mt-24 overflow-hidden py-24 sm:py-32">
+      <span className="section-index pointer-events-none absolute end-2 top-10 select-none sm:end-6" aria-hidden>02</span>
+      <div className="pointer-events-none absolute -start-24 top-1/3 h-72 w-72 rounded-full aurora floaty-slow" style={{ background: "var(--accent)", opacity: 0.08 }} aria-hidden />
+      <div className="wrap relative">
         <Reveal>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -40,11 +42,12 @@ export function Skills() {
                   setActiveDomain(i);
                   setOpenSkill(d.skills[0].name.en);
                 }}
-                className="rounded-full border px-4 py-2 text-sm transition-all"
+                className="rounded-full border px-4 py-2 text-sm transition-all duration-300 hover:-translate-y-0.5"
                 style={{
                   borderColor: i === activeDomain ? "transparent" : "var(--line-2)",
                   background: i === activeDomain ? "var(--accent)" : "transparent",
                   color: i === activeDomain ? "var(--on-accent)" : "var(--fg)",
+                  boxShadow: i === activeDomain ? "0 10px 26px -8px var(--glow)" : "none",
                 }}
               >
                 {pick(d.title, lang)}
@@ -64,7 +67,8 @@ export function Skills() {
             const open = openSkill === s.name.en;
             return (
               <Reveal key={s.name.en} delay={i * 60}>
-                <div className="panel overflow-hidden transition-colors" style={{ borderColor: open ? "var(--line-2)" : "var(--line)" }}>
+                <div className={`panel sheen glow-border relative overflow-hidden ${open ? "elev" : "lift"}`} style={{ borderColor: open ? "var(--line-2)" : "var(--line)" }}>
+                  <span className="absolute inset-y-3 start-0 w-[3px] rounded-full transition-transform duration-500" style={{ background: "var(--accent)", transform: open ? "scaleY(1)" : "scaleY(0)", transformOrigin: "center", boxShadow: "0 0 12px var(--glow)" }} aria-hidden />
                   <button onClick={() => setOpenSkill(open ? "" : s.name.en)} className="flex w-full items-center gap-4 p-5 text-start sm:p-6">
                     <span className="mono text-xs text-[var(--fg-2)]">{faDigit(i + 1).padStart(2, lang === "fa" ? "۰" : "0")}</span>
                     <span className="min-w-0 flex-1">
