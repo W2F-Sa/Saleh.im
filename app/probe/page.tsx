@@ -326,6 +326,28 @@ export default function ProbePage() {
 
   const quality = useMemo(() => connectionQuality(pings.map((p) => p.hist)), [pings]);
 
+  const exportReport = () => {
+    const report = {
+      generatedAt: new Date().toISOString(),
+      note: "Generated locally by saleh.im/probe. Nothing was transmitted.",
+      network: { ip: geo?.ip, geo, providerTrail: trail, webrtc: cands, latency: pings.map((p) => ({ label: p.label, ms: p.ms })), quality, httpProtocol: caps?.httpProtocol, clockSkewMs: caps?.timeSkewMs },
+      intelligence: { estimatedCountry: jurisdiction.cc, confidence: jurisdiction.confidence, connection: connection.kind, maskingLikelihood: connection.masking, findings: findings.map((f) => ({ severity: f.severity, title: f.title })) },
+      tls: tls,
+      keyboard,
+      device: device ? { ...device, canvasHash: device.canvasHash } : null,
+      deviceHash: devHash,
+      cpu,
+      capabilities: caps ? { supported: caps.supportedCount, total: caps.totalCount, uniqueness: caps.uniqueness, refreshHz: caps.refreshHz, groups: caps.groups } : null,
+    };
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `probe-report-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const score = Math.max(
     0,
     100 -
@@ -348,6 +370,7 @@ export default function ProbePage() {
         title: "Probe",
         sub: "بازرسِ اتصال و ردپای دیجیتال",
         scan: "اسکن دوباره",
+        exportReport: "خروجیِ گزارش",
         scoreL: "امتیاز حریم خصوصی",
         tabs: { intel: "برآورد", network: "شبکه", capabilities: "قابلیت‌ها", fingerprint: "ردپا", performance: "کارایی", permissions: "دسترسی‌ها" },
         capsTitle: "سطحِ قابلیت‌ها",
@@ -437,6 +460,7 @@ export default function ProbePage() {
         title: "Probe",
         sub: "Connection & digital-trail inspector",
         scan: "Re-scan",
+        exportReport: "Export report",
         scoreL: "Privacy score",
         tabs: { intel: "Assessment", network: "Network", capabilities: "Capabilities", fingerprint: "Trail", performance: "Performance", permissions: "Permissions" },
         capsTitle: "Capability surface",
@@ -569,6 +593,9 @@ export default function ProbePage() {
         <div className="flex items-center gap-2">
           <button onClick={() => setTick((t) => t + 1)} className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs" style={{ borderColor: "var(--line-2)" }}>
             ↻ {T.scan}
+          </button>
+          <button onClick={exportReport} title={T.exportReport} className="hidden items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs sm:flex" style={{ borderColor: "var(--line-2)" }}>
+            ↓ {T.exportReport}
           </button>
           <button onClick={toggleMode} className="grid h-9 w-9 place-items-center rounded-full border" style={{ borderColor: "var(--line-2)" }}>
             ◑
