@@ -39,6 +39,7 @@ type Msg = {
   dur?: number;
   file?: { name: string; size: number; mime: string };
   progress?: number;
+  edited?: boolean;
 };
 type Convo = { peer: string; handle: string; name: string; messages: Msg[]; unread: number; typing: boolean };
 type ConnState = { conn: any; keyPair?: CryptoKeyPair; keys?: SessionKeys; ready: boolean; handle: string };
@@ -46,6 +47,14 @@ type CallKind = "audio" | "video" | "screen";
 type Call = { kind: CallKind; dir: "in" | "out" | "active"; peer: string; handle: string; mc: any } | null;
 
 const EMOJI = ["👍", "❤️", "🔥", "😂", "🎉", "🙏", "✅", "👀"];
+const EMOJI_PICKER = [
+  "😀", "😁", "😂", "🤣", "😊", "😍", "😎", "🤩", "😉", "😏",
+  "😅", "😭", "🥲", "😴", "🤔", "🤨", "🙄", "😬", "😮", "😇",
+  "👍", "👎", "👏", "🙌", "🙏", "💪", "🤝", "✌️", "🤙", "👋",
+  "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "💯", "🔥", "✨",
+  "🎉", "🎊", "🥳", "🚀", "⭐", "🌟", "⚡", "💡", "✅", "❌",
+  "🤗", "😤", "😡", "🥺", "😱", "🤯", "🫡", "🤖", "👀", "🎯",
+];
 const CHUNK = 48000;
 const MAX_FILE = 8_000_000;
 const MAX_VOICE_MS = 120_000;
@@ -177,6 +186,11 @@ export default function MessengerPage() {
   const [latency, setLatency] = useState<Record<string, number>>({});
   const [atBottom, setAtBottom] = useState(true);
   const [reactFor, setReactFor] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Msg | null>(null);
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [notify, setNotify] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   // media
   const [call, setCall] = useState<Call>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -197,6 +211,8 @@ export default function MessengerPage() {
   const typingTimer = useRef<Record<string, any>>({});
   const pingTimer = useRef<Record<string, any>>({});
   const fileRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const notifyRef = useRef(false);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -208,6 +224,7 @@ export default function MessengerPage() {
 
   useEffect(() => { activeRef.current = active; }, [active]);
   useEffect(() => { soundRef.current = soundOn; }, [soundOn]);
+  useEffect(() => { notifyRef.current = notify; }, [notify]);
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
 
   // attach media streams to video elements
@@ -248,6 +265,8 @@ export default function MessengerPage() {
         rec: "در حال ضبط", holdRec: "برای ضبطِ ویس نگه دار", file: "فایل", download: "دانلود", sending: "در حال ارسال",
         receiving: "در حال دریافت", tooBig: "فایل باید کمتر از ۸ مگابایت باشد.", callBusy: "یک تماسِ دیگر در جریان است.",
         micDenied: "دسترسی به میکروفون/دوربین رد شد.",
+        edit: "ویرایش", copyText: "کپیِ متن", save: "ذخیره", edited: "ویرایش‌شده", emoji: "ایموجی",
+        editing: "در حالِ ویرایش", dropHere: "فایل را برای ارسال اینجا رها کن", notif: "اعلانِ دسکتاپ", jump: "پرش به پیام",
       }
     : {
         title: "Cipher", tag: "End-to-end encrypted peer-to-peer messenger",
@@ -267,6 +286,8 @@ export default function MessengerPage() {
         rec: "Recording", holdRec: "Hold to record a voice note", file: "File", download: "Download", sending: "Sending",
         receiving: "Receiving", tooBig: "File must be under 8 MB.", callBusy: "Another call is already in progress.",
         micDenied: "Microphone / camera access denied.",
+        edit: "Edit", copyText: "Copy text", save: "Save", edited: "edited", emoji: "Emoji",
+        editing: "Editing", dropHere: "Drop file to send", notif: "Desktop notifications", jump: "Jump to message",
       };
 
   const nameOf = (c: Convo) => c.handle.split("#")[0];
@@ -303,7 +324,18 @@ export default function MessengerPage() {
         const isActive = activeRef.current === peer;
         return { ...c, messages: [...c.messages, msg], unread: msg.mine || isActive ? c.unread : c.unread + 1, typing: false };
       });
-      if (!msg.mine && msg.kind !== "system" && soundRef.current) blip("in");
+      if (!msg.mine && msg.kind !== "system") {
+        if (soundRef.current) blip("in");
+        // desktop notification when the tab is in the background
+        if (notifyRef.current && typeof document !== "undefined" && document.hidden && "Notification" in window && Notification.permission === "granted") {
+          try {
+            const h = connsRef.current[peer]?.handle || peer;
+            const body = msg.kind === "image" ? "🖼️" : msg.kind === "voice" ? "🎙️" : msg.kind === "file" ? "📎 " + (msg.file?.name || "") : (msg.text || "").slice(0, 120);
+            const n = new Notification(h, { body, tag: peer, silent: true });
+            n.onclick = () => { window.focus(); n.close(); };
+          } catch {}
+        }
+      }
     },
     [upsert]
   );
@@ -372,6 +404,11 @@ export default function MessengerPage() {
           } catch {}
           delete fileRecv.current[data.id];
         }
+      } else if (data.t === "edit" && cs.keys) {
+        try {
+          const text = await openSeal(cs.keys, data.c);
+          upsert(peer, (c) => ({ ...c, messages: c.messages.map((m) => (m.id === data.id ? { ...m, text, edited: true } : m)) }));
+        } catch {}
       } else if (data.t === "typing") {
         upsert(peer, (c) => ({ ...c, typing: !!data.on }), false);
       } else if (data.t === "seen") {
@@ -575,6 +612,7 @@ export default function MessengerPage() {
 
   /* ---------- send actions ---------- */
   const sendText = async () => {
+    if (editing) return saveEdit();
     const text = input.trim();
     const cs = active ? connsRef.current[active] : null;
     if (!text || !active || !cs?.keys || !cs.conn?.open) return;
@@ -689,6 +727,47 @@ export default function MessengerPage() {
   };
   const deleteMsg = (msg: Msg) => { if (active) upsert(active, (c) => ({ ...c, messages: c.messages.filter((m) => m.id !== msg.id) })); };
 
+  const startEdit = (msg: Msg) => { if (!msg.mine || msg.kind !== "text") return; setReplyTo(null); setEditing(msg); setInput(msg.text || ""); requestAnimationFrame(() => textareaRef.current?.focus()); };
+  const cancelEdit = () => { setEditing(null); setInput(""); };
+  const saveEdit = async () => {
+    const text = input.trim();
+    const id = editing?.id;
+    const orig = editing?.text;
+    setEditing(null);
+    setInput("");
+    if (!id || !active || !text || text === orig) return;
+    const cs = connsRef.current[active];
+    if (!cs?.keys) return;
+    try {
+      send(active, { t: "edit", id, c: await seal(cs.keys, text) });
+      upsert(active, (c) => ({ ...c, messages: c.messages.map((m) => (m.id === id ? { ...m, text, edited: true } : m)) }));
+    } catch {}
+  };
+  const insertEmoji = (e: string) => {
+    const ta = textareaRef.current;
+    if (!ta) { setInput((v) => v + e); return; }
+    const start = ta.selectionStart ?? input.length;
+    const end = ta.selectionEnd ?? input.length;
+    const next = input.slice(0, start) + e + input.slice(end);
+    setInput(next);
+    requestAnimationFrame(() => { ta.focus(); const pos = start + e.length; try { ta.setSelectionRange(pos, pos); } catch {} });
+  };
+  const copyMsgText = (m: Msg) => { if (m.text) copy(m.text, "m-" + m.id); };
+  const jumpTo = (id: string) => {
+    const el = document.getElementById("msg-" + id);
+    if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); setHighlightId(id); setTimeout(() => setHighlightId((h) => (h === id ? null : h)), 1600); }
+  };
+  const onDropFiles = (files: FileList | null) => {
+    const f = files?.[0];
+    if (!f || !active) return;
+    f.type.startsWith("image/") ? sendImage(f) : sendFile(f);
+  };
+  const requestNotify = () => {
+    if (!("Notification" in window)) return;
+    if (Notification.permission === "granted") { setNotify((n) => !n); return; }
+    Notification.requestPermission().then((p) => setNotify(p === "granted"));
+  };
+
   const onType = () => {
     if (!active) return;
     send(active, { t: "typing", on: true });
@@ -790,6 +869,7 @@ export default function MessengerPage() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setSoundOn((s) => !s)} title={T.sound} className="grid h-9 w-9 place-items-center rounded-full border" style={{ borderColor: "var(--line-2)", opacity: soundOn ? 1 : 0.5 }}>{soundOn ? "🔔" : "🔕"}</button>
+          <button onClick={requestNotify} title={T.notif} className="hidden h-9 w-9 place-items-center rounded-full border sm:grid" style={{ borderColor: "var(--line-2)", opacity: notify ? 1 : 0.5 }}>{notify ? "📨" : "✉️"}</button>
           <button onClick={toggleMode} className="grid h-9 w-9 place-items-center rounded-full border" style={{ borderColor: "var(--line-2)" }}>◑</button>
           <LangToggle />
           <button onClick={signOut} className="btn btn-outline h-9 px-4 py-0 text-sm">{T.signout}</button>
@@ -897,7 +977,20 @@ export default function MessengerPage() {
               )}
 
               {/* messages */}
-              <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 space-y-1 overflow-y-auto p-4 thin-scroll" style={{ background: "var(--bg)" }}>
+              <div
+                ref={scrollRef}
+                onScroll={onScroll}
+                onDragOver={(e) => { if (curReady) { e.preventDefault(); setDragOver(true); } }}
+                onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false); }}
+                onDrop={(e) => { e.preventDefault(); setDragOver(false); if (curReady) onDropFiles(e.dataTransfer?.files || null); }}
+                className="relative min-h-0 flex-1 space-y-1 overflow-y-auto p-4 thin-scroll"
+                style={{ background: "var(--bg)" }}
+              >
+                {dragOver && (
+                  <div className="pointer-events-none absolute inset-3 z-20 grid place-items-center rounded-2xl border-2 border-dashed" style={{ borderColor: "var(--accent)", background: "color-mix(in srgb, var(--accent) 10%, transparent)" }}>
+                    <span className="font-display text-lg" style={{ color: "var(--accent)" }}>⬇ {T.dropHere}</span>
+                  </div>
+                )}
                 {shown.map((m, i) => {
                   const prev = shown[i - 1];
                   const showDay = !prev || new Date(prev.ts).toDateString() !== new Date(m.ts).toDateString();
@@ -908,9 +1001,9 @@ export default function MessengerPage() {
                     <div key={m.id}>
                       {showDay && <DayDivider label={dayLabel(m.ts)} />}
                       <div className={`group flex items-end gap-1.5 ${m.mine ? "flex-row-reverse" : ""}`}>
-                        <div className="relative max-w-[80%]">
+                        <div id={`msg-${m.id}`} className="relative max-w-[80%] transition-shadow duration-300" style={highlightId === m.id ? { boxShadow: "0 0 0 2px var(--accent)", borderRadius: 18 } : undefined}>
                           <div className="rounded-2xl px-3.5 py-2 text-[14.5px] leading-relaxed shadow-sm" style={m.mine ? { background: "var(--accent)", color: "var(--on-accent)", borderEndEndRadius: 5 } : { background: "var(--bg-3)", borderEndStartRadius: 5 }}>
-                            {m.reply && <div className="mb-1.5 rounded-lg border-s-2 px-2 py-1 text-xs opacity-80" style={{ borderColor: m.mine ? "rgba(0,0,0,0.35)" : "var(--accent)", background: m.mine ? "rgba(0,0,0,0.08)" : "var(--bg-2)" }}>{m.reply.preview}</div>}
+                            {m.reply && <button onClick={() => m.reply && jumpTo(m.reply.id)} className="mb-1.5 block w-full rounded-lg border-s-2 px-2 py-1 text-start text-xs opacity-80 transition-opacity hover:opacity-100" style={{ borderColor: m.mine ? "rgba(0,0,0,0.35)" : "var(--accent)", background: m.mine ? "rgba(0,0,0,0.08)" : "var(--bg-2)" }}>{m.reply.preview}</button>}
                             {m.kind === "image" ? (
                               m.dataUrl ? <img src={m.dataUrl} alt="" className="max-h-64 rounded-lg" /> : <div className="grid h-32 w-48 place-items-center rounded-lg" style={{ background: "rgba(0,0,0,0.1)" }}>{m.progress ?? 0}%</div>
                             ) : m.kind === "voice" ? (
@@ -930,6 +1023,7 @@ export default function MessengerPage() {
                               <div className="mt-1.5 h-1 overflow-hidden rounded-full" style={{ background: "rgba(0,0,0,0.15)" }}><div className="h-full rounded-full" style={{ width: `${m.progress}%`, background: m.mine ? "var(--on-accent)" : "var(--accent)" }} /></div>
                             )}
                             <span className="mt-1 flex items-center justify-end gap-1 text-[10px]" style={{ opacity: 0.7 }}>
+                              {m.edited && <span className="italic">{T.edited}</span>}
                               <span className="mono force-ltr">{time(m.ts)}</span>
                               {m.mine && <span>{m.status === "seen" ? "✓✓" : "✓"}</span>}
                             </span>
@@ -945,9 +1039,11 @@ export default function MessengerPage() {
                             </div>
                           )}
                         </div>
-                        <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                        <div className="flex shrink-0 flex-wrap gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                           <button onClick={() => setReactFor(reactFor === m.id ? null : m.id)} className="grid h-6 w-6 place-items-center rounded-full text-xs" style={{ background: "var(--bg-2)", border: "1px solid var(--line)" }} title={T.react}>☺</button>
                           <button onClick={() => setReplyTo(m)} className="grid h-6 w-6 place-items-center rounded-full text-xs" style={{ background: "var(--bg-2)", border: "1px solid var(--line)" }} title={T.reply}>↩</button>
+                          {m.kind === "text" && <button onClick={() => copyMsgText(m)} className="grid h-6 w-6 place-items-center rounded-full text-[10px]" style={{ background: "var(--bg-2)", border: "1px solid var(--line)" }} title={T.copyText}>{copied === "m-" + m.id ? "✓" : "⧉"}</button>}
+                          {m.mine && m.kind === "text" && <button onClick={() => startEdit(m)} className="grid h-6 w-6 place-items-center rounded-full text-[10px]" style={{ background: "var(--bg-2)", border: "1px solid var(--line)" }} title={T.edit}>✎</button>}
                           <button onClick={() => deleteMsg(m)} className="grid h-6 w-6 place-items-center rounded-full text-xs" style={{ background: "var(--bg-2)", border: "1px solid var(--line)" }} title={T.del}>✕</button>
                         </div>
                       </div>
@@ -963,10 +1059,16 @@ export default function MessengerPage() {
 
               {/* composer */}
               <div className="border-t p-3" style={{ borderColor: "var(--line)", background: "var(--bg-2)" }}>
-                {replyTo && (
+                {replyTo && !editing && (
                   <div className="mb-2 flex items-center justify-between rounded-lg border-s-2 px-3 py-1.5 text-xs" style={{ borderColor: "var(--accent)", background: "var(--bg-3)" }}>
                     <span className="truncate"><span className="text-[var(--fg-2)]">{T.replyingTo}: </span>{(replyTo.text || "🎙️").slice(0, 60)}</span>
                     <button onClick={() => setReplyTo(null)} className="text-[var(--fg-2)] hover:text-[var(--fg)]">✕</button>
+                  </div>
+                )}
+                {editing && (
+                  <div className="mb-2 flex items-center justify-between rounded-lg border-s-2 px-3 py-1.5 text-xs" style={{ borderColor: "var(--accent)", background: "var(--bg-3)" }}>
+                    <span className="truncate"><span className="text-[var(--fg-2)]">✎ {T.editing}: </span>{(editing.text || "").slice(0, 60)}</span>
+                    <button onClick={cancelEdit} className="text-[var(--fg-2)] hover:text-[var(--fg)]">✕</button>
                   </div>
                 )}
                 {recording ? (
@@ -980,13 +1082,26 @@ export default function MessengerPage() {
                     <button onClick={stopRec} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl" style={{ background: "var(--accent)", color: "var(--on-accent)" }}>➤</button>
                   </div>
                 ) : (
-                  <div className="flex items-end gap-2">
+                  <div className="relative flex items-end gap-2">
+                    {showEmoji && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setShowEmoji(false)} />
+                        <div className="absolute bottom-full z-20 mb-2 grid max-h-52 w-[19rem] grid-cols-8 gap-1 overflow-y-auto rounded-2xl border p-2 thin-scroll" style={{ borderColor: "var(--line-2)", background: "var(--bg-2)", insetInlineStart: 0, boxShadow: "0 24px 48px -20px var(--shadow)" }}>
+                          {EMOJI_PICKER.map((e, i) => <button key={e + i} onClick={() => insertEmoji(e)} className="rounded-lg p-1 text-lg transition-transform hover:scale-125 hover:bg-[var(--bg-3)]">{e}</button>)}
+                        </div>
+                      </>
+                    )}
                     <button onClick={() => fileRef.current?.click()} disabled={attaching} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border text-lg disabled:opacity-50" style={{ borderColor: "var(--line-2)" }} title={T.file}>{attaching ? "…" : "📎"}</button>
+                    <button onClick={() => setShowEmoji((s) => !s)} className="hidden h-11 w-11 shrink-0 place-items-center rounded-xl border text-lg sm:grid" style={{ borderColor: "var(--line-2)" }} title={T.emoji}>😊</button>
                     <input ref={fileRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) (f.type.startsWith("image/") ? sendImage(f) : sendFile(f)); e.currentTarget.value = ""; }} />
-                    <textarea value={input} onChange={(e) => { setInput(e.target.value); onType(); }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(); } }} rows={1} placeholder={T.typeMsg} disabled={!curReady} className="max-h-32 min-h-[44px] flex-1 resize-none rounded-xl border px-4 py-2.5 text-[var(--fg)] outline-none disabled:opacity-50" style={{ background: "var(--bg-3)", borderColor: "var(--line)" }} />
+                    <textarea ref={textareaRef} value={input} onChange={(e) => { setInput(e.target.value); if (!editing) onType(); }} onPaste={(e) => { const f = e.clipboardData?.files?.[0]; if (f && f.type.startsWith("image/")) { e.preventDefault(); sendImage(f); } }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(); } else if (e.key === "Escape" && editing) cancelEdit(); }} rows={1} placeholder={editing ? `${T.editing}…` : T.typeMsg} disabled={!curReady} className="max-h-32 min-h-[44px] flex-1 resize-none rounded-xl border px-4 py-2.5 text-[var(--fg)] outline-none disabled:opacity-50" style={{ background: "var(--bg-3)", borderColor: editing ? "var(--accent)" : "var(--line)" }} />
                     {input.trim() ? (
-                      <button onClick={sendText} disabled={!curReady} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl disabled:opacity-40" style={{ background: "var(--accent)", color: "var(--on-accent)" }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" /></svg>
+                      <button onClick={sendText} disabled={!curReady} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl disabled:opacity-40" style={{ background: "var(--accent)", color: "var(--on-accent)" }} title={editing ? T.save : undefined}>
+                        {editing ? (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                        ) : (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" /></svg>
+                        )}
                       </button>
                     ) : (
                       <button onClick={startRec} disabled={!curReady} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border text-lg disabled:opacity-40" style={{ borderColor: "var(--line-2)" }} title={T.holdRec}>🎙️</button>

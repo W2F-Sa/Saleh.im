@@ -114,8 +114,27 @@ const MASTER_SECRET_BYTES = 64; // 512-bit
 const MAGIC = utf8ToBytes("SVLT"); // Saleh VauLT
 const FORMAT_VERSION = 1;
 
-async function deriveMasterSecret(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
-  const baseKey = await subtle().importKey("raw", utf8ToBytes(password), "PBKDF2", false, ["deriveBits"]);
+/**
+ * Composite key material (KeePass-style two-factor). When a keyfile is present
+ * the effective secret becomes SHA-512( password ‖ SHA-512(keyfile) ), so an
+ * attacker needs BOTH the master password AND the exact keyfile bytes. Without
+ * a keyfile the password bytes are used directly (unchanged behaviour).
+ */
+async function compositeMaterial(password: string, keyfile?: Uint8Array | null): Promise<Uint8Array> {
+  const pw = utf8ToBytes(password);
+  if (!keyfile || keyfile.length === 0) return pw;
+  const kfHash = new Uint8Array(await subtle().digest("SHA-512", keyfile as BufferSource));
+  return new Uint8Array(await subtle().digest("SHA-512", concatBytes(pw, kfHash) as BufferSource));
+}
+
+async function deriveMasterSecret(
+  password: string,
+  salt: Uint8Array,
+  iterations: number,
+  keyfile?: Uint8Array | null
+): Promise<Uint8Array> {
+  const material = await compositeMaterial(password, keyfile);
+  const baseKey = await subtle().importKey("raw", material as BufferSource, "PBKDF2", false, ["deriveBits"]);
   const bits = await subtle().deriveBits(
     { name: "PBKDF2", hash: "SHA-512", salt: salt as BufferSource, iterations },
     baseKey,
@@ -246,10 +265,11 @@ export type VaultContainer = {
 export async function seal(
   password: string,
   plaintext: string,
-  iterations: number = DEFAULT_KDF_ITERATIONS
+  iterations: number = DEFAULT_KDF_ITERATIONS,
+  keyfile?: Uint8Array | null
 ): Promise<VaultContainer> {
   const salt = randomBytes(16);
-  const master = await deriveMasterSecret(password, salt, iterations); // stage 1
+  const master = await deriveMasterSecret(password, salt, iterations, keyfile); // stage 1
   const keys = await deriveSubKeys(master, salt); // stage 2
 
   const ivGcm1 = randomBytes(12);
@@ -328,7 +348,7 @@ export class VaultAuthError extends Error {
   }
 }
 
-export async function open(password: string, container: VaultContainer): Promise<string> {
+export async function open(password: string, container: VaultContainer, keyfile?: Uint8Array | null): Promise<string> {
   const salt = b64ToBytes(container.salt);
   const ivGcm1 = b64ToBytes(container.ivGcm1);
   const ivCtr = b64ToBytes(container.ivCtr);
@@ -338,7 +358,7 @@ export async function open(password: string, container: VaultContainer): Promise
   const macEnv = b64ToBytes(container.mac);
   const iterations = container.it || DEFAULT_KDF_ITERATIONS;
 
-  const master = await deriveMasterSecret(password, salt, iterations); // stage 1
+  const master = await deriveMasterSecret(password, salt, iterations, keyfile); // stage 1
   const keys = await deriveSubKeys(master, salt); // stage 2
 
   const header: Header = {
@@ -414,8 +434,8 @@ export function isVaultContainer(x: unknown): x is VaultContainer {
    a separate HKDF label so it reveals nothing about the encryption keys.
    ========================================================================== */
 
-export async function passwordVerifier(password: string, salt: Uint8Array, iterations: number): Promise<string> {
-  const master = await deriveMasterSecret(password, salt, iterations);
+export async function passwordVerifier(password: string, salt: Uint8Array, iterations: number, keyfile?: Uint8Array | null): Promise<string> {
+  const master = await deriveMasterSecret(password, salt, iterations, keyfile);
   const hkdfKey = await subtle().importKey("raw", master as BufferSource, "HKDF", false, ["deriveBits"]);
   const v = await hkdfBytes(hkdfKey, salt, "vault:v1:verifier", 32);
   return bytesToB64(v);

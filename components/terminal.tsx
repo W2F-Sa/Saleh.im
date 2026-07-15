@@ -252,8 +252,10 @@ export function Terminal() {
   };
 
   return (
-    <section id="terminal" ref={sectionRef} className="relative scroll-mt-24 py-24 sm:py-32">
-      <div className="wrap">
+    <section id="terminal" ref={sectionRef} className="relative scroll-mt-24 overflow-hidden py-24 sm:py-32">
+      <span className="section-index pointer-events-none absolute start-2 top-10 select-none sm:start-6" aria-hidden>05</span>
+      <div className="pointer-events-none absolute end-[8%] top-1/3 h-72 w-72 rounded-full aurora floaty" style={{ background: "var(--accent)", opacity: 0.1 }} aria-hidden />
+      <div className="wrap relative">
         <div className="grid gap-10 lg:grid-cols-12 lg:gap-8">
           <div className="lg:col-span-4">
             <Reveal>
@@ -272,7 +274,7 @@ export function Terminal() {
                       if (interactive) submit(c);
                       inputRef.current?.focus();
                     }}
-                    className="chip force-ltr transition-colors hover:text-[var(--fg)]"
+                    className="chip force-ltr transition-all duration-300 hover:-translate-y-0.5 hover:border-[var(--accent)] hover:text-[var(--accent)]"
                   >
                     {c}
                   </button>

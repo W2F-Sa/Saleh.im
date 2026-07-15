@@ -1,0 +1,76 @@
+{
+  "name": "saleh-vault-desktop",
+  "productName": "Vault",
+  "version": "1.0.0",
+  "description": "Zero-knowledge, eight-layer encrypted password vault by Saleh — installable on Ubuntu / Kubuntu.",
+  "author": "Saleh Saghafiani <salehcodez@gmail.com>",
+  "license": "MIT",
+  "homepage": "https://saleh.im/vault",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --linux",
+    "dist:deb": "electron-builder --linux deb",
+    "dist:appimage": "electron-builder --linux AppImage",
+    "dist:all": "electron-builder --linux deb AppImage rpm"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "im.saleh.vault",
+    "productName": "Vault",
+    "copyright": "© Saleh Saghafiani",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "build/**/*"
+    ],
+    "linux": {
+      "target": [
+        { "target": "deb", "arch": ["x64"] },
+        { "target": "AppImage", "arch": ["x64"] }
+      ],
+      "category": "Utility",
+      "maintainer": "Saleh Saghafiani <salehcodez@gmail.com>",
+      "vendor": "Saleh Saghafiani",
+      "icon": "build/icon.png",
+      "synopsis": "Zero-knowledge encrypted password vault",
+      "description": "A local-first, zero-knowledge password manager protected by an eight-layer encryption cascade (PBKDF2 + HKDF + AES-256-GCM/CTR/CBC + HMAC), with an optional keyfile second factor, a built-in RFC-6238 authenticator, a strong generator and an offline security audit. Your master password never leaves the device.",
+      "desktop": {
+        "entry": {
+          "Name": "Vault",
+          "GenericName": "Password Manager",
+          "Comment": "Zero-knowledge encrypted password vault",
+          "Categories": "Utility;Security;",
+          "Keywords": "password;vault;security;2fa;totp;encryption;",
+          "StartupWMClass": "Vault"
+        }
+      }
+    },
+    "deb": {
+      "priority": "optional",
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libsecret-1-0",
+        "libgbm1"
+      ]
+    },
+    "appImage": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    }
+  }
+}

@@ -16,6 +16,7 @@ import {
   persistVault,
   destroyVault,
   changeMasterPassword,
+  vaultRequiresKeyfile,
   exportBackup,
   importBackup,
   filterEntries,
@@ -70,6 +71,7 @@ export default function VaultPage() {
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [pw, setPw] = useState("");
+  const [keyfile, setKeyfile] = useState<Uint8Array | null>(null);
   const [data, setData] = useState<VaultData | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -84,16 +86,17 @@ export default function VaultPage() {
       if (!pw) return;
       setSaving(true);
       try {
-        await persistVault(pw, next);
+        await persistVault(pw, next, keyfile);
       } finally {
         setSaving(false);
       }
     },
-    [pw]
+    [pw, keyfile]
   );
 
   const lock = useCallback(() => {
     setPw("");
+    setKeyfile(null);
     setData(null);
     setPhase("locked");
   }, []);
@@ -154,17 +157,17 @@ export default function VaultPage() {
       </header>
 
       {phase === "loading" && <div className="grid min-h-[70vh] place-items-center text-[var(--fg-2)]">…</div>}
-      {phase === "onboard" && <Onboard t={t} fa={fa} onCreated={(p, d) => { setPw(p); setData(d); setPhase("unlocked"); }} />}
+      {phase === "onboard" && <Onboard t={t} fa={fa} onCreated={(p, d, kf) => { setPw(p); setKeyfile(kf); setData(d); setPhase("unlocked"); }} />}
       {phase === "locked" && (
         <Unlock
           t={t}
           fa={fa}
-          onUnlocked={(p, d) => { setPw(p); setData(d); setPhase("unlocked"); }}
+          onUnlocked={(p, d, kf) => { setPw(p); setKeyfile(kf); setData(d); setPhase("unlocked"); }}
           onReset={() => setPhase("onboard")}
         />
       )}
       {phase === "unlocked" && data && (
-        <VaultApp t={t} fa={fa} data={data} pw={pw} persist={persist} onChangePw={setPw} onWipe={() => { destroyVault(); lock(); setPhase("onboard"); }} />
+        <VaultApp t={t} fa={fa} data={data} pw={pw} keyfile={keyfile} persist={persist} onChangePw={setPw} onWipe={() => { destroyVault(); lock(); setPhase("onboard"); }} />
       )}
 
       <VaultStyles />
@@ -176,13 +179,21 @@ export default function VaultPage() {
    ONBOARDING
    ========================================================================== */
 
-function Onboard({ t, fa, onCreated }: { t: VaultStrings; fa: boolean; onCreated: (pw: string, d: VaultData) => void }) {
+async function readFileBytes(file: File): Promise<Uint8Array> {
+  const buf = await file.arrayBuffer();
+  return new Uint8Array(buf);
+}
+
+function Onboard({ t, fa, onCreated }: { t: VaultStrings; fa: boolean; onCreated: (pw: string, d: VaultData, kf: Uint8Array | null) => void }) {
   const [p1, setP1] = useState("");
   const [p2, setP2] = useState("");
   const [hint, setHint] = useState("");
   const [reveal, setReveal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [keyfile, setKeyfile] = useState<Uint8Array | null>(null);
+  const [keyfileName, setKeyfileName] = useState("");
+  const kfRef = useRef<HTMLInputElement>(null);
   const strength = useMemo(() => analyzeStrength(p1), [p1]);
 
   const submit = async () => {
@@ -191,8 +202,8 @@ function Onboard({ t, fa, onCreated }: { t: VaultStrings; fa: boolean; onCreated
     if (strength.score < 2) return setErr(t.tooWeak);
     setBusy(true);
     try {
-      const d = await createVault(p1, hint || undefined);
-      onCreated(p1, d);
+      const d = await createVault(p1, hint || undefined, keyfile);
+      onCreated(p1, d, keyfile);
     } catch (e) {
       setErr(String((e as Error).message || e));
     } finally {
@@ -244,6 +255,17 @@ function Onboard({ t, fa, onCreated }: { t: VaultStrings; fa: boolean; onCreated
           <Field label={t.hint}>
             <TextInput value={hint} onChange={(e) => setHint(e.target.value)} />
           </Field>
+          <div>
+            <span className="label mb-1.5 block">{t.keyfile}</span>
+            <input ref={kfRef} type="file" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (f) { setKeyfile(await readFileBytes(f)); setKeyfileName(f.name); } }} />
+            <button type="button" onClick={() => kfRef.current?.click()} className="btn btn-outline w-full justify-center py-2.5 text-sm">
+              <Icon name={keyfile ? "check" : "key"} size={15} /> {keyfile ? `${t.keyfileLoaded} · ${keyfileName}` : t.selectKeyfile}
+            </button>
+            {keyfile && (
+              <button type="button" onClick={() => { setKeyfile(null); setKeyfileName(""); }} className="mt-1.5 text-xs text-[var(--fg-2)] hover:text-[var(--fg)]">✕ {t.cancel}</button>
+            )}
+            <p className="mt-1.5 text-xs text-[var(--fg-2)]">{t.keyfileHint}</p>
+          </div>
           {err && <p className="text-sm" style={{ color: "#ef4444" }}>{err}</p>}
           <button onClick={submit} disabled={busy || !p1} className="btn btn-accent w-full py-3 disabled:opacity-50">
             {busy ? "…" : <><Icon name="shield" size={16} /> {t.create}</>}
@@ -264,26 +286,31 @@ function Onboard({ t, fa, onCreated }: { t: VaultStrings; fa: boolean; onCreated
    UNLOCK
    ========================================================================== */
 
-function Unlock({ t, fa, onUnlocked, onReset }: { t: VaultStrings; fa: boolean; onUnlocked: (pw: string, d: VaultData) => void; onReset: () => void }) {
+function Unlock({ t, fa, onUnlocked, onReset }: { t: VaultStrings; fa: boolean; onUnlocked: (pw: string, d: VaultData, kf: Uint8Array | null) => void; onReset: () => void }) {
   const [pw, setPw] = useState("");
   const [reveal, setReveal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [showHint, setShowHint] = useState(false);
+  const [keyfile, setKeyfile] = useState<Uint8Array | null>(null);
+  const [keyfileName, setKeyfileName] = useState("");
+  const kfRef = useRef<HTMLInputElement>(null);
   const meta = useMemo(() => loadMeta(), []);
+  const needsKeyfile = useMemo(() => vaultRequiresKeyfile(), []);
 
   const submit = async () => {
     setErr("");
+    if (needsKeyfile && !keyfile) return setErr(t.needKeyfile);
     setBusy(true);
     try {
-      const ok = await verifyPassword(pw);
+      const ok = await verifyPassword(pw, keyfile);
       if (!ok) {
         setErr(t.wrong);
         setBusy(false);
         return;
       }
-      const d = await unlockVault(pw);
-      onUnlocked(pw, d);
+      const d = await unlockVault(pw, keyfile);
+      onUnlocked(pw, d, keyfile);
     } catch {
       setErr(t.wrong);
       setBusy(false);
@@ -318,6 +345,15 @@ function Unlock({ t, fa, onUnlocked, onReset }: { t: VaultStrings; fa: boolean; 
               <Icon name={reveal ? "eye-off" : "eye"} size={17} />
             </button>
           </div>
+          {needsKeyfile && (
+            <div className="mt-3">
+              <input ref={kfRef} type="file" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (f) { setKeyfile(await readFileBytes(f)); setKeyfileName(f.name); } }} />
+              <button type="button" onClick={() => kfRef.current?.click()} className="btn btn-outline w-full justify-center py-2.5 text-sm">
+                <Icon name={keyfile ? "check" : "key"} size={15} /> {keyfile ? `${t.keyfileLoaded} · ${keyfileName}` : t.selectKeyfile}
+              </button>
+              <p className="mt-1.5 text-center text-xs text-[var(--fg-2)]">{t.keyfileRequired}</p>
+            </div>
+          )}
           {err && <p className="mt-2 text-sm" style={{ color: "#ef4444" }}>{err}</p>}
           <button onClick={submit} disabled={busy || !pw} className="btn btn-accent mt-4 w-full py-3 disabled:opacity-50">
             {busy ? "…" : <><Icon name="unlock" size={16} /> {t.unlock}</>}
@@ -359,6 +395,7 @@ function VaultApp({
   fa,
   data,
   pw,
+  keyfile,
   persist,
   onChangePw,
   onWipe,
@@ -367,6 +404,7 @@ function VaultApp({
   fa: boolean;
   data: VaultData;
   pw: string;
+  keyfile: Uint8Array | null;
   persist: (d: VaultData) => Promise<void>;
   onChangePw: (p: string) => void;
   onWipe: () => void;
@@ -500,7 +538,7 @@ function VaultApp({
 
           {nav.kind === "view" && nav.value === "settings" && (
             <div className="tab-anim">
-              <Settings t={t} fa={fa} data={data} pw={pw} persist={persist} onChangePw={onChangePw} onWipe={onWipe} onImported={(d) => { persist(d); }} />
+              <Settings t={t} fa={fa} data={data} pw={pw} keyfile={keyfile} persist={persist} onChangePw={onChangePw} onWipe={onWipe} onImported={(d) => { persist(d); }} />
             </div>
           )}
 
@@ -802,6 +840,7 @@ function Settings({
   fa,
   data,
   pw,
+  keyfile,
   persist,
   onChangePw,
   onWipe,
@@ -811,6 +850,7 @@ function Settings({
   fa: boolean;
   data: VaultData;
   pw: string;
+  keyfile: Uint8Array | null;
   persist: (d: VaultData) => Promise<void>;
   onChangePw: (p: string) => void;
   onWipe: () => void;
@@ -839,7 +879,7 @@ function Settings({
     setMsg("");
     if (analyzeStrength(next).score < 2) return setMsg(t.tooWeak);
     try {
-      await changeMasterPassword(cur, next);
+      await changeMasterPassword(cur, next, undefined, keyfile, keyfile);
       onChangePw(next);
       setCur("");
       setNext("");
@@ -866,7 +906,7 @@ function Settings({
       const pass = prompt(fa ? "رمزِ اصلیِ این پشتیبان را وارد کن:" : "Enter the master password for this backup:");
       if (!pass) return;
       try {
-        const d = await importBackup(String(reader.result), pass);
+        const d = await importBackup(String(reader.result), pass, keyfile);
         onChangePw(pass);
         onImported(d);
         setMsg(fa ? "پشتیبان بازیابی شد." : "Backup restored.");
@@ -911,6 +951,16 @@ function Settings({
             </button>
           )}
           {installed && <span className="chip" style={{ color: "#22c55e" }}><Icon name="check" size={13} /> {t.installed}</span>}
+        </div>
+        <div className="relative mt-4 flex flex-wrap items-center gap-3 border-t pt-4" style={{ borderColor: "var(--line)" }}>
+          <span className="grid h-9 w-9 place-items-center rounded-xl" style={{ background: "var(--bg-3)", color: "var(--fg-2)" }}>🐧</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{t.desktopLinux}</p>
+            <p className="text-xs text-[var(--fg-2)]">{t.desktopHint}</p>
+          </div>
+          <a href="https://github.com/im-saleh/Saleh.im/tree/main/desktop" target="_blank" rel="noopener noreferrer" className="btn btn-outline px-3 py-2 text-xs">
+            <Icon name="download" size={14} /> {t.desktopCta}
+          </a>
         </div>
       </div>
 

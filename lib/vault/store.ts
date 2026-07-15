@@ -85,7 +85,13 @@ export type VaultMeta = {
   verifier: string; // base64 verifier hash
   createdAt: number;
   hint?: string;
+  keyfile?: boolean; // whether a keyfile second factor is required
 };
+
+/** Whether this device's vault was sealed with a keyfile second factor. */
+export function vaultRequiresKeyfile(): boolean {
+  return !!loadMeta()?.keyfile;
+}
 
 const KEY_META = "saleh.vault.meta.v1";
 const KEY_BLOB = "saleh.vault.blob.v1";
@@ -169,10 +175,10 @@ export function emptyVault(): VaultData {
   };
 }
 
-export async function createVault(password: string, hint?: string): Promise<VaultData> {
+export async function createVault(password: string, hint?: string, keyfile?: Uint8Array | null): Promise<VaultData> {
   const salt = randomBytes(16);
   const iterations = DEFAULT_KDF_ITERATIONS;
-  const verifier = await passwordVerifier(password, salt, iterations);
+  const verifier = await passwordVerifier(password, salt, iterations, keyfile);
   const meta: VaultMeta = {
     version: 1,
     salt: bytesToB64(salt),
@@ -180,26 +186,27 @@ export async function createVault(password: string, hint?: string): Promise<Vaul
     verifier,
     createdAt: Date.now(),
     hint: hint || undefined,
+    keyfile: !!(keyfile && keyfile.length),
   };
   const data = emptyVault();
-  const container = await seal(password, JSON.stringify(data), iterations);
+  const container = await seal(password, JSON.stringify(data), iterations, keyfile);
   safeSet(KEY_META, JSON.stringify(meta));
   safeSet(KEY_BLOB, JSON.stringify(container));
   return data;
 }
 
 /** Fast, pre-decrypt password check via the verifier hash. */
-export async function verifyPassword(password: string): Promise<boolean> {
+export async function verifyPassword(password: string, keyfile?: Uint8Array | null): Promise<boolean> {
   const meta = loadMeta();
   if (!meta) return false;
-  const v = await passwordVerifier(password, b64ToBytes(meta.salt), meta.iterations);
+  const v = await passwordVerifier(password, b64ToBytes(meta.salt), meta.iterations, keyfile);
   return v === meta.verifier;
 }
 
-export async function unlockVault(password: string): Promise<VaultData> {
+export async function unlockVault(password: string, keyfile?: Uint8Array | null): Promise<VaultData> {
   const container = loadContainer();
   if (!container) throw new Error("No vault found on this device.");
-  const json = await open(password, container);
+  const json = await open(password, container, keyfile);
   const data = JSON.parse(json) as VaultData;
   // defensive migration
   if (!data.folders) data.folders = [...DEFAULT_FOLDERS];
@@ -208,10 +215,10 @@ export async function unlockVault(password: string): Promise<VaultData> {
   return data;
 }
 
-export async function persistVault(password: string, data: VaultData): Promise<void> {
+export async function persistVault(password: string, data: VaultData, keyfile?: Uint8Array | null): Promise<void> {
   const meta = loadMeta();
   const iterations = meta?.iterations ?? DEFAULT_KDF_ITERATIONS;
-  const container = await seal(password, JSON.stringify(data), iterations);
+  const container = await seal(password, JSON.stringify(data), iterations, keyfile);
   safeSet(KEY_BLOB, JSON.stringify(container));
 }
 
@@ -221,11 +228,19 @@ export function destroyVault(): void {
 }
 
 /** Change the master password: re-derive verifier + re-seal the blob. */
-export async function changeMasterPassword(oldPassword: string, newPassword: string, hint?: string): Promise<void> {
-  const data = await unlockVault(oldPassword);
+export async function changeMasterPassword(
+  oldPassword: string,
+  newPassword: string,
+  hint?: string,
+  oldKeyfile?: Uint8Array | null,
+  newKeyfile?: Uint8Array | null
+): Promise<void> {
+  const data = await unlockVault(oldPassword, oldKeyfile);
   const salt = randomBytes(16);
   const iterations = DEFAULT_KDF_ITERATIONS;
-  const verifier = await passwordVerifier(newPassword, salt, iterations);
+  // if a new keyfile isn't explicitly provided, keep the existing factor
+  const kf = newKeyfile !== undefined ? newKeyfile : oldKeyfile;
+  const verifier = await passwordVerifier(newPassword, salt, iterations, kf);
   const meta: VaultMeta = {
     version: 1,
     salt: bytesToB64(salt),
@@ -233,8 +248,9 @@ export async function changeMasterPassword(oldPassword: string, newPassword: str
     verifier,
     createdAt: loadMeta()?.createdAt ?? Date.now(),
     hint: hint ?? loadMeta()?.hint,
+    keyfile: !!(kf && kf.length),
   };
-  const container = await seal(newPassword, JSON.stringify(data), iterations);
+  const container = await seal(newPassword, JSON.stringify(data), iterations, kf);
   safeSet(KEY_META, JSON.stringify(meta));
   safeSet(KEY_BLOB, JSON.stringify(container));
 }
@@ -253,11 +269,11 @@ export function exportBackup(): string | null {
   return JSON.stringify(backup, null, 2);
 }
 
-export async function importBackup(json: string, password: string): Promise<VaultData> {
+export async function importBackup(json: string, password: string, keyfile?: Uint8Array | null): Promise<VaultData> {
   const backup = JSON.parse(json) as Backup;
   if (!backup.meta || !backup.container) throw new Error("Not a valid Vault backup.");
   // validate password against imported container before committing
-  const data = JSON.parse(await open(password, backup.container)) as VaultData;
+  const data = JSON.parse(await open(password, backup.container, keyfile)) as VaultData;
   safeSet(KEY_META, JSON.stringify(backup.meta));
   safeSet(KEY_BLOB, JSON.stringify(backup.container));
   return data;

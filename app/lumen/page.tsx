@@ -628,6 +628,20 @@ export default function LumenPage() {
                     ))}
                   </div>
 
+                  {/* 24h range position */}
+                  {c && c.high24 && c.low24 && c.high24 > c.low24 && (
+                    <div className="mt-4">
+                      <div className="mb-1 flex items-center justify-between text-xs force-ltr">
+                        <span className="text-[var(--fg-2)]">{money(c.low24)}</span>
+                        <span className="label">24h</span>
+                        <span className="text-[var(--fg-2)]">{money(c.high24)}</span>
+                      </div>
+                      <div className="relative h-2 rounded-full" style={{ background: "linear-gradient(90deg,#ef4444,#eab308,#22c55e)" }}>
+                        <div className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2" style={{ left: `${Math.max(0, Math.min(100, ((c.price - c.low24) / (c.high24 - c.low24)) * 100))}%`, background: "var(--fg)", borderColor: "var(--bg-2)", boxShadow: "0 0 8px var(--glow)" }} />
+                      </div>
+                    </div>
+                  )}
+
                   {/* technical analysis */}
                   {detailAnalysis && (
                     <div className="mt-5">
