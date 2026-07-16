@@ -12,6 +12,9 @@ class QPushButton;
 class QSystemTrayIcon;
 class QTimer;
 class QLabel;
+class QComboBox;
+class QIcon;
+class QPoint;
 
 // The unlocked application: sidebar filters, entry list, detail pane, tray,
 // shortcuts, auto-lock, clipboard auto-clear and all item operations.
@@ -40,7 +43,15 @@ private:
     void newEntry(const QString& type);
     void editEntry(const QString& id);
     void deleteEntry(const QString& id);
+    void duplicateEntry(const QString& id);
     void toggleFavorite(const QString& id);
+    void moveToFolder(const QString& id, const QString& folderId);
+    void listContextMenu(const QPoint& pos);
+    void quickCapture();
+    void openVaultFolder();
+    void updateStats();
+    QIcon avatarFor(const QString& type) const;
+    void bumpUsed(const QString& id);
     void openGenerator();
     void openAudit();
     void openSettings();
@@ -69,6 +80,9 @@ private:
     QWidget* sidebar_ = nullptr;
     QVBoxLayout* sidebarLayout_ = nullptr;
     QLineEdit* searchEdit_ = nullptr;
+    QComboBox* sortCombo_ = nullptr;
+    QLabel* statsLabel_ = nullptr;
+    QTimer* revealTimer_ = nullptr;
     QListWidget* list_ = nullptr;
     QWidget* detail_ = nullptr;
     QVBoxLayout* detailLayout_ = nullptr;

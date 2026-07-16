@@ -3,11 +3,13 @@
 #include <QApplication>
 #include <QCloseEvent>
 #include <QClipboard>
+#include <QComboBox>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QEvent>
 #include <QFile>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QKeySequence>
@@ -17,19 +19,36 @@
 #include <QListWidgetItem>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPainter>
+#include <QPainterPath>
+#include <QPixmap>
+#include <QProcess>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QShortcut>
+#include <QSize>
 #include <QSystemTrayIcon>
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
 
+#include <algorithm>
+
 #include "authdialog.hpp"
 #include "crypto.hpp"
 #include "dialogs.hpp"
+#include "effects.hpp"
 #include "generator.hpp"
 #include "theme.hpp"
+
+static QColor typeColor(const QString& t) {
+    if (t == "login") return QColor("#c8ff4d");
+    if (t == "note") return QColor("#f7b955");
+    if (t == "card") return QColor("#67e8f9");
+    if (t == "identity") return QColor("#c084fc");
+    if (t == "totp") return QColor("#4ade80");
+    return QColor("#8b929e");
+}
 
 static QString iconFor(const QString& type) {
     if (type == "login") return "🔑";
@@ -87,7 +106,45 @@ MainWindow::MainWindow(const QString& path, const QString& password, const QByte
         lastClip_.clear();
     });
 
+    revealTimer_ = new QTimer(this);
+    revealTimer_->setSingleShot(true);
+    connect(revealTimer_, &QTimer::timeout, this, [this] {
+        if (reveal_) { reveal_ = false; showDetail(selectedId_); }
+    });
+
     applyTheme(data_.settings.theme);
+    updateStats();
+
+    // smooth window fade-in (windowOpacity is safe for top-level windows)
+    setWindowOpacity(0.0);
+    auto* wa = new QPropertyAnimation(this, "windowOpacity", this);
+    wa->setDuration(240);
+    wa->setStartValue(0.0);
+    wa->setEndValue(1.0);
+    wa->setEasingCurve(QEasingCurve::OutCubic);
+    wa->start(QAbstractAnimation::DeleteWhenStopped);
+}
+
+QIcon MainWindow::avatarFor(const QString& type) const {
+    QPixmap pm(40, 40);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    p.setRenderHint(QPainter::Antialiasing);
+    QColor c = typeColor(type);
+    QColor bg = c;
+    bg.setAlpha(38);
+    QPainterPath path;
+    path.addRoundedRect(2, 2, 36, 36, 11, 11);
+    p.fillPath(path, bg);
+    p.setPen(QPen(c, 1.4));
+    p.drawPath(path);
+    p.setPen(c);
+    QFont f = p.font();
+    f.setPixelSize(19);
+    p.setFont(f);
+    p.drawText(QRect(2, 2, 36, 36), Qt::AlignCenter, iconFor(type));
+    p.end();
+    return QIcon(pm);
 }
 
 // ---------------------------------------------------------------------------
@@ -124,6 +181,14 @@ void MainWindow::buildUi() {
     });
     top->addWidget(searchEdit_, 1);
 
+    sortCombo_ = new QComboBox(mid);
+    sortCombo_->addItem("Recent", "used");
+    sortCombo_->addItem("Updated", "updated");
+    sortCombo_->addItem("Title", "title");
+    sortCombo_->setToolTip("Sort");
+    connect(sortCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this] { rebuildList(); });
+    top->addWidget(sortCombo_);
+
     auto* newBtn = new QPushButton("＋ New", mid);
     newBtn->setObjectName("accent");
     auto* newMenu = new QMenu(newBtn);
@@ -155,8 +220,15 @@ void MainWindow::buildUi() {
     top->addWidget(lockBtn);
     mv->addLayout(top);
 
+    statsLabel_ = new QLabel(mid);
+    statsLabel_->setObjectName("muted");
+    mv->addWidget(statsLabel_);
+
     list_ = new QListWidget(mid);
     list_->setSpacing(2);
+    list_->setIconSize(QSize(38, 38));
+    list_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(list_, &QListWidget::customContextMenuRequested, this, &MainWindow::listContextMenu);
     connect(list_, &QListWidget::currentItemChanged, this, [this](QListWidgetItem* it) {
         if (it) showDetail(it->data(Qt::UserRole).toString());
     });
@@ -179,6 +251,7 @@ void MainWindow::buildUi() {
     detailLayout_->addStretch();
     scroll->setWidget(detail_);
     h->addWidget(scroll);
+    fx::shadow(scroll, 48, 0, 70);
 
     setCentralWidget(central);
 }
@@ -190,12 +263,20 @@ void MainWindow::rebuildSidebar() {
         if (item->widget()) item->widget()->deleteLater();
         delete item;
     }
-    struct Nav { QString key; QString label; };
-    QVector<Nav> navs = {
-        {"all", "🗂  All items"}, {"favorites", "★  Favorites"}, {"login", "🔑  Logins"},
-        {"totp", "🛡  2FA codes"}, {"note", "📝  Notes"}, {"card", "💳  Cards"}, {"identity", "🪪  Identities"}};
-    auto addBtn = [this](const QString& key, const QString& label) {
-        auto* b = new QPushButton(label, sidebar_);
+    auto countFor = [this](const QString& key) {
+        int n = 0;
+        for (const auto& e : data_.entries) {
+            if (key == "all") n++;
+            else if (key == "favorites") { if (e.favorite) n++; }
+            else if (key == "recent") { if (e.usedAt > 0) n++; }
+            else if (key.startsWith("folder:")) { if (e.folder == key.mid(7)) n++; }
+            else if (e.type == key) n++;
+        }
+        return n;
+    };
+    auto addBtn = [this, &countFor](const QString& key, const QString& label) {
+        int c = countFor(key);
+        auto* b = new QPushButton(QString("%1%2").arg(label, c > 0 ? "   " + QString::number(c) : QString()), sidebar_);
         b->setObjectName("nav");
         b->setCheckable(true);
         b->setChecked(filter_ == key);
@@ -206,6 +287,11 @@ void MainWindow::rebuildSidebar() {
         });
         sidebarLayout_->addWidget(b);
     };
+    struct Nav { QString key; QString label; };
+    QVector<Nav> navs = {
+        {"all", "🗂  All items"}, {"favorites", "★  Favorites"}, {"recent", "🕘  Recent"},
+        {"login", "🔑  Logins"}, {"totp", "🛡  2FA codes"}, {"note", "📝  Notes"},
+        {"card", "💳  Cards"}, {"identity", "🪪  Identities"}};
     for (const auto& n : navs) addBtn(n.key, n.label);
 
     if (!data_.folders.isEmpty()) {
@@ -221,25 +307,42 @@ void MainWindow::rebuildSidebar() {
 void MainWindow::rebuildList() {
     list_->clear();
     const QString q = search_.trimmed().toLower();
+    const QStringList terms = q.split(' ', Qt::SkipEmptyParts);  // all-terms match
+
+    QVector<const vault::Entry*> rows;
     for (const auto& e : data_.entries) {
-        // filter
         if (filter_ == "favorites") { if (!e.favorite) continue; }
+        else if (filter_ == "recent") { if (e.usedAt <= 0) continue; }
         else if (filter_.startsWith("folder:")) { if (e.folder != filter_.mid(7)) continue; }
         else if (filter_ != "all") { if (e.type != filter_) continue; }
-        // search
-        if (!q.isEmpty()) {
-            QString hay = (e.title + " " + e.username + " " + e.url + " " + e.email + " " +
-                           e.notes + " " + e.otpIssuer + " " + e.tags.join(" ")).toLower();
-            if (!hay.contains(q)) continue;
+        if (!terms.isEmpty()) {
+            const QString hay = (e.title + " " + e.username + " " + e.url + " " + e.email + " " +
+                                 e.notes + " " + e.otpIssuer + " " + e.cardholder + " " + e.fullName + " " +
+                                 e.tags.join(" ")).toLower();
+            bool all = true;
+            for (const QString& t : terms) if (!hay.contains(t)) { all = false; break; }
+            if (!all) continue;
         }
-        QString sub = e.type == "login" ? (e.username.isEmpty() ? vault::domainOf(e.url) : e.username)
-                      : e.type == "card" ? (e.cardNumber.isEmpty() ? e.cardBrand : "•••• " + e.cardNumber.right(4))
-                      : e.type == "identity" ? e.email
-                      : e.type == "totp" ? e.otpIssuer
-                                          : e.notes.left(40);
-        auto* it = new QListWidgetItem(QString("%1  %2\n     %3").arg(iconFor(e.type), e.title.isEmpty() ? "—" : e.title, sub));
-        it->setData(Qt::UserRole, e.id);
-        if (e.favorite) it->setText(it->text() + "   ★");
+        rows.append(&e);
+    }
+
+    const QString sortKey = sortCombo_ ? sortCombo_->currentData().toString() : "updated";
+    std::sort(rows.begin(), rows.end(), [&](const vault::Entry* a, const vault::Entry* b) {
+        if (sortKey == "title") return a->title.compare(b->title, Qt::CaseInsensitive) < 0;
+        if (sortKey == "used") return (a->usedAt ? a->usedAt : a->updated) > (b->usedAt ? b->usedAt : b->updated);
+        return a->updated > b->updated;
+    });
+
+    for (const vault::Entry* e : rows) {
+        QString sub = e->type == "login" ? (e->username.isEmpty() ? vault::domainOf(e->url) : e->username)
+                      : e->type == "card" ? (e->cardNumber.isEmpty() ? e->cardBrand : "•••• " + e->cardNumber.right(4))
+                      : e->type == "identity" ? e->email
+                      : e->type == "totp" ? e->otpIssuer
+                                           : e->notes.left(40);
+        auto* it = new QListWidgetItem(avatarFor(e->type),
+                                       QString("%1%2\n%3").arg(e->title.isEmpty() ? "—" : e->title,
+                                                               e->favorite ? "   ★" : "", sub));
+        it->setData(Qt::UserRole, e->id);
         list_->addItem(it);
     }
     if (list_->count() > 0) list_->setCurrentRow(0);
@@ -320,10 +423,22 @@ void MainWindow::showDetail(const QString& id) {
         addDetailRow(detailLayout_, "Password", e->password, true, true);
         addDetailRow(detailLayout_, "Website", e->url, true);
         if (!e->url.isEmpty()) {
-            auto* open = new QPushButton("Open website ↗", detail_);
             QString url = e->url;
+            QString pw = e->password;
+            auto* openRow = new QHBoxLayout();
+            auto* open = new QPushButton("Open website ↗", detail_);
             connect(open, &QPushButton::clicked, this, [url] { QDesktopServices::openUrl(QUrl(url.contains("://") ? url : "https://" + url)); });
-            detailLayout_->addWidget(open);
+            openRow->addWidget(open, 1);
+            if (!pw.isEmpty()) {
+                auto* co = new QPushButton("Copy & open", detail_);
+                co->setObjectName("accent");
+                connect(co, &QPushButton::clicked, this, [this, url, pw] {
+                    copyValue(pw);
+                    QDesktopServices::openUrl(QUrl(url.contains("://") ? url : "https://" + url));
+                });
+                openRow->addWidget(co);
+            }
+            detailLayout_->addLayout(openRow);
         }
         if (!e->totp.isEmpty()) {
             auto* l = new QLabel("2FA CODE", detail_);
@@ -390,6 +505,12 @@ void MainWindow::showDetail(const QString& id) {
     actions->addWidget(del);
     detailLayout_->addLayout(actions);
     detailLayout_->addStretch();
+
+    fx::fadeIn(detail_, 180);
+    if (reveal_ && data_.settings.revealSeconds > 0)
+        revealTimer_->start(data_.settings.revealSeconds * 1000);
+    else if (revealTimer_)
+        revealTimer_->stop();
 }
 
 // ---------------------------------------------------------------------------
@@ -461,6 +582,7 @@ void MainWindow::openSettings() {
     connect(&d, &SettingsDialog::changeMasterRequested, this, &MainWindow::changeMaster);
     connect(&d, &SettingsDialog::exportRequested, this, &MainWindow::exportBackup);
     connect(&d, &SettingsDialog::wipeRequested, this, &MainWindow::wipeVault);
+    connect(&d, &SettingsDialog::openFolderRequested, this, &MainWindow::openVaultFolder);
     if (d.exec() == QDialog::Accepted) {
         data_.settings = d.result();
         kdfPreset_ = data_.settings.kdf;
@@ -527,6 +649,7 @@ void MainWindow::lock() {
     data_ = auth.data();
     rebuildSidebar();
     rebuildList();
+    updateStats();
     applyTheme(data_.settings.theme);
     if (tray_) tray_->show();
     showNormal();
@@ -541,6 +664,14 @@ void MainWindow::copyValue(const QString& text) {
     lastClip_ = text;
     if (data_.settings.clipboardClearSeconds > 0)
         clipTimer_->start(data_.settings.clipboardClearSeconds * 1000);
+    bumpUsed(selectedId_);
+}
+
+void MainWindow::bumpUsed(const QString& id) {
+    if (id.isEmpty()) return;
+    for (auto& e : data_.entries)
+        if (e.id == id) { e.usedAt = QDateTime::currentMSecsSinceEpoch(); break; }
+    // in-memory only; persisted on the next real change / lock / close
 }
 
 void MainWindow::applyTheme(const QString& mode) {
@@ -574,6 +705,7 @@ void MainWindow::installShortcuts() {
     new QShortcut(QKeySequence("Ctrl+F"), this, [this] { searchEdit_->setFocus(); searchEdit_->selectAll(); });
     new QShortcut(QKeySequence("Ctrl+N"), this, [this] { newEntry("login"); });
     new QShortcut(QKeySequence("Ctrl+G"), this, [this] { openGenerator(); });
+    new QShortcut(QKeySequence("Ctrl+Shift+A"), this, [this] { quickCapture(); });
     new QShortcut(QKeySequence("Ctrl+Q"), this, [this] { quitting_ = true; qApp->quit(); });
 }
 
@@ -611,4 +743,104 @@ void MainWindow::persist() {
     QString err;
     if (!vault::save(path_, password_, keyfile_, kdfPreset_, data_, err))
         QMessageBox::warning(this, "Vault", "Could not save: " + err);
+    updateStats();
+}
+
+void MainWindow::updateStats() {
+    if (!statsLabel_) return;
+    int total = data_.entries.size();
+    int weak = 0;
+    for (const auto& e : data_.entries)
+        if (e.type == "login" && !e.password.isEmpty() && vc::analyzeStrength(e.password.toStdString()).score <= 1) weak++;
+    statsLabel_->setText(QString("🗂 %1 items%2").arg(total).arg(weak ? QString("   ·   ⚠ %1 weak").arg(weak) : QString("   ·   ✓ healthy")));
+}
+
+void MainWindow::duplicateEntry(const QString& id) {
+    const vault::Entry* e = findEntry(id);
+    if (!e) return;
+    vault::Entry c = *e;
+    c.id = vault::newId();
+    c.title = e->title + " (copy)";
+    c.created = c.updated = QDateTime::currentMSecsSinceEpoch();
+    c.usedAt = 0;
+    data_.entries.prepend(c);
+    persist();
+    rebuildList();
+}
+
+void MainWindow::moveToFolder(const QString& id, const QString& folderId) {
+    for (auto& e : data_.entries)
+        if (e.id == id) { e.folder = folderId; break; }
+    persist();
+    rebuildList();
+}
+
+void MainWindow::openVaultFolder() {
+    QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(path_).absolutePath()));
+}
+
+void MainWindow::listContextMenu(const QPoint& pos) {
+    QListWidgetItem* it = list_->itemAt(pos);
+    if (!it) return;
+    const QString id = it->data(Qt::UserRole).toString();
+    const vault::Entry* e = findEntry(id);
+    if (!e) return;
+    const QString user = e->username, pass = e->password, url = e->url;
+    const QString otp = e->type == "login" ? e->totp : e->otpSecret;
+    const bool fav = e->favorite;
+    const QString type = e->type;
+
+    QMenu m(this);
+    if (type == "login") {
+        if (!user.isEmpty()) m.addAction("Copy username", this, [this, id, user] { selectedId_ = id; copyValue(user); });
+        if (!pass.isEmpty()) m.addAction("Copy password", this, [this, id, pass] { selectedId_ = id; copyValue(pass); });
+    }
+    if (!otp.isEmpty())
+        m.addAction("Copy 2FA code", this, [this, id, otp] {
+            vc::OtpAuth p = vc::parseOtpAuth(otp.toStdString());
+            if (!p.secret.empty()) { int r; selectedId_ = id; copyValue(QString::fromStdString(vc::totp(p.secret, QDateTime::currentSecsSinceEpoch(), p.digits, p.period, r))); }
+        });
+    if (!url.isEmpty())
+        m.addAction("Open website", this, [url] { QDesktopServices::openUrl(QUrl(url.contains("://") ? url : "https://" + url)); });
+    m.addSeparator();
+    m.addAction("Edit", this, [this, id] { editEntry(id); });
+    m.addAction("Duplicate", this, [this, id] { duplicateEntry(id); });
+    m.addAction(fav ? "Unfavorite" : "Favorite", this, [this, id] { toggleFavorite(id); });
+    QMenu* mv = m.addMenu("Move to folder");
+    mv->addAction("No folder", this, [this, id] { moveToFolder(id, QString()); });
+    for (const auto& f : data_.folders) {
+        QString fid = f.id;
+        mv->addAction(f.icon + " " + f.name, this, [this, id, fid] { moveToFolder(id, fid); });
+    }
+    m.addSeparator();
+    m.addAction("Delete", this, [this, id] { deleteEntry(id); });
+    m.exec(list_->mapToGlobal(pos));
+}
+
+void MainWindow::quickCapture() {
+    if (!data_.settings.quickCapture) {
+        QMessageBox::information(this, "Vault", "Quick Capture is turned off in Settings.");
+        return;
+    }
+    QString site;
+    QProcess p;
+    p.start("xdotool", {"getactivewindow", "getwindowname"});
+    if (p.waitForFinished(700)) site = QString::fromUtf8(p.readAllStandardOutput()).trimmed();
+    for (const QString& suf : {" - Mozilla Firefox", " — Mozilla Firefox", " - Google Chrome",
+                               " - Chromium", " - Brave", " - Microsoft Edge", " — Chromium"}) {
+        int i = site.indexOf(suf);
+        if (i >= 0) site = site.left(i);
+    }
+    vault::Entry e = vault::newEntry("login");
+    e.title = site;
+    EntryDialog dlg(e, data_.folders, this);
+    dlg.setWindowTitle("Quick Capture — save credential");
+    showNormal();
+    raise();
+    activateWindow();
+    if (dlg.exec() == QDialog::Accepted) {
+        data_.entries.prepend(dlg.result());
+        persist();
+        rebuildList();
+    }
 }

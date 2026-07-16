@@ -233,6 +233,16 @@ SettingsDialog::SettingsDialog(const vault::Settings& s, QWidget* parent) : QDia
     tray_->setChecked(s.minimizeToTray);
     form->addRow("", tray_);
 
+    quick_ = new QCheckBox("Quick Capture — save credentials with Ctrl+Shift+A", this);
+    quick_->setChecked(s.quickCapture);
+    form->addRow("", quick_);
+
+    reveal_ = new QSpinBox(this);
+    reveal_->setRange(0, 120);
+    reveal_->setValue(s.revealSeconds);
+    reveal_->setSuffix(" s");
+    form->addRow("Re-hide revealed after", reveal_);
+
     theme_ = new QComboBox(this);
     theme_->addItem("Dark", "dark");
     theme_->addItem("Light", "light");
@@ -254,10 +264,13 @@ SettingsDialog::SettingsDialog(const vault::Settings& s, QWidget* parent) : QDia
     auto* actions = new QHBoxLayout();
     auto* chg = new QPushButton("Change master password", this);
     auto* exp = new QPushButton("Export backup", this);
+    auto* fld = new QPushButton("Open vault folder", this);
     connect(chg, &QPushButton::clicked, this, [this] { emit changeMasterRequested(); });
     connect(exp, &QPushButton::clicked, this, [this] { emit exportRequested(); });
+    connect(fld, &QPushButton::clicked, this, [this] { emit openFolderRequested(); });
     actions->addWidget(chg);
     actions->addWidget(exp);
+    actions->addWidget(fld);
     root->addLayout(actions);
 
     auto* wipe = new QPushButton("Erase this vault", this);
@@ -282,6 +295,8 @@ vault::Settings SettingsDialog::result() const {
     s.concealByDefault = conceal_->isChecked();
     s.lockOnMinimize = lockMin_->isChecked();
     s.minimizeToTray = tray_->isChecked();
+    s.quickCapture = quick_->isChecked();
+    s.revealSeconds = reveal_->value();
     s.theme = theme_->currentData().toString();
     s.kdf = kdf_->currentData().toString();
     return s;
