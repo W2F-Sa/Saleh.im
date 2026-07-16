@@ -73,6 +73,7 @@ export default function DownloadPage() {
 
   const features: [string, string][] = fa
     ? [
+        ["🎯", "ذخیره‌ی سریعِ رمز (Ctrl+Shift+A)"], ["🖱️", "منوی راست‌کلیک"], ["🕘", "اخیر + مرتب‌سازی + آواتار"],
         ["🔑", "پنج نوع آیتم"], ["🛡️", "کدهای دومرحله‌ای (TOTP)"], ["🎲", "سازنده‌ی رمز و عبارت‌عبور"],
         ["📊", "سنجه‌ی قدرت رمز"], ["🔎", "جست‌وجو، پوشه، برچسب"], ["⭐", "برگزیده‌ها"],
         ["📋", "پاک‌سازیِ خودکارِ کلیپ‌بورد"], ["⏱️", "قفلِ خودکار در بی‌کاری"], ["🗂️", "سینی سیستم"],
@@ -80,6 +81,7 @@ export default function DownloadPage() {
         ["💾", "پشتیبانِ رمزنگاری‌شده"], ["🌗", "تمِ روشن/تیره"], ["🔗", "بازکردنِ آدرس"],
       ]
     : [
+        ["🎯", "Quick Capture (Ctrl+Shift+A)"], ["🖱️", "Right-click actions"], ["🕘", "Recent, sort & avatars"],
         ["🔑", "Five item types"], ["🛡️", "TOTP 2FA codes"], ["🎲", "Password & passphrase generator"],
         ["📊", "Strength meter"], ["🔎", "Search, folders, tags"], ["⭐", "Favorites"],
         ["📋", "Clipboard auto-clear"], ["⏱️", "Idle auto-lock"], ["🗂️", "System tray"],

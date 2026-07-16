@@ -61,5 +61,9 @@ set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "amd64")
 # sensible explicit floor.
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "libsodium23 | libsodium23t64, libqt6widgets6, libqt6gui6, libqt6core6")
+# Cleanly supersede the old Electron-based package (same .desktop path).
+set(CPACK_DEBIAN_PACKAGE_CONFLICTS "saleh-vault-desktop")
+set(CPACK_DEBIAN_PACKAGE_REPLACES "saleh-vault-desktop")
+set(CPACK_DEBIAN_PACKAGE_PROVIDES "saleh-vault-desktop")
 set(CPACK_PACKAGE_FILE_NAME "saleh-vault_${PROJECT_VERSION}_amd64")
 include(CPack)

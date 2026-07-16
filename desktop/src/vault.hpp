@@ -60,6 +60,8 @@ struct Settings {
     bool concealByDefault = true;
     bool lockOnMinimize = true;
     bool minimizeToTray = true;
+    bool quickCapture = true;    // global-hotkey credential capture
+    int revealSeconds = 20;      // auto-reconceal revealed secrets
     QString theme = "dark";      // dark | light
     QString kdf = "moderate";    // interactive | moderate | sensitive
 };

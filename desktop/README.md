@@ -19,15 +19,18 @@ offline. Nothing is ever uploaded.
 
 ## Features (20+)
 
-Master-password unlock · optional keyfile · create/edit/delete · five item
-types (login, 2FA, note, card, identity) · **RFC-6238 TOTP** with live
+**Quick Capture** (Ctrl+Shift+A grabs the active site and saves a credential) ·
+master-password unlock · optional keyfile · create/edit/delete/**duplicate** ·
+five item types (login, 2FA, note, card, identity) · **RFC-6238 TOTP** with live
 countdown · password **generator** + **passphrase** generator · strength meter ·
-search · folders · tags · favorites · clipboard **auto-clear** · **auto-lock**
-on idle · lock on minimize · **system tray** · keyboard shortcuts
-(Ctrl+L/F/N/G/Q) · reveal/hide · **password history** · **security audit**
-(weak/reused/old/no-2FA/insecure) · **encrypted backup** export · change master
-password · dark/light theme · configurable Argon2 strength · open-URL · secure
-wipe.
+**multi-term search** · folders · **move-to-folder** · tags · favorites ·
+**Recent** view + **sort** (recent/updated/title) · colored **avatars** ·
+**right-click actions** · **copy & open** · clipboard **auto-clear** ·
+**auto-lock** on idle · **auto re-hide** revealed secrets · lock on minimize ·
+**system tray** · keyboard shortcuts (Ctrl+L/F/N/G/Q, Ctrl+Shift+A) ·
+reveal/hide · **password history** · **security audit** · **encrypted backup** ·
+change master password · dark/light theme · configurable Argon2 strength ·
+open-URL · **open vault folder** · secure wipe.
 
 ## Build & install
 

@@ -121,6 +121,8 @@ QByteArray serialize(const Data& d) {
     s["concealByDefault"] = d.settings.concealByDefault;
     s["lockOnMinimize"] = d.settings.lockOnMinimize;
     s["minimizeToTray"] = d.settings.minimizeToTray;
+    s["quickCapture"] = d.settings.quickCapture;
+    s["revealSeconds"] = d.settings.revealSeconds;
     s["theme"] = d.settings.theme;
     s["kdf"] = d.settings.kdf;
     root["settings"] = s;
@@ -151,6 +153,8 @@ bool deserialize(const QByteArray& json, Data& out) {
     out.settings.concealByDefault = s["concealByDefault"].toBool(true);
     out.settings.lockOnMinimize = s["lockOnMinimize"].toBool(true);
     out.settings.minimizeToTray = s["minimizeToTray"].toBool(true);
+    out.settings.quickCapture = s["quickCapture"].toBool(true);
+    out.settings.revealSeconds = s["revealSeconds"].toInt(20);
     out.settings.theme = s["theme"].toString("dark");
     out.settings.kdf = s["kdf"].toString("moderate");
     return true;

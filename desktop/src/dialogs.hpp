@@ -46,14 +46,17 @@ signals:
     void changeMasterRequested();
     void exportRequested();
     void wipeRequested();
+    void openFolderRequested();
     void themePreview(const QString& mode);
 
 private:
     QSpinBox* autoLock_ = nullptr;
     QSpinBox* clip_ = nullptr;
+    QSpinBox* reveal_ = nullptr;
     QCheckBox* conceal_ = nullptr;
     QCheckBox* lockMin_ = nullptr;
     QCheckBox* tray_ = nullptr;
+    QCheckBox* quick_ = nullptr;
     QComboBox* theme_ = nullptr;
     QComboBox* kdf_ = nullptr;
     vault::Settings s_;
