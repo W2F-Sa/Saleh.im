@@ -598,9 +598,10 @@ body::before {
   inset: 0;
   border-radius: inherit;
   background: radial-gradient(
-    420px circle at var(--mx, 50%) var(--my, 50%),
-    color-mix(in srgb, var(--accent) 12%, transparent),
-    transparent 60%
+    460px circle at var(--mx, 50%) var(--my, 50%),
+    color-mix(in srgb, var(--accent) 17%, transparent),
+    color-mix(in srgb, var(--accent-2) 9%, transparent) 34%,
+    transparent 62%
   );
   opacity: 0;
   transition: opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1);
@@ -718,17 +719,23 @@ textarea,
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(150deg, color-mix(in srgb, var(--accent) 60%, transparent), transparent 45%);
+  padding: 1.4px;
+  /* a bright accent light that rides the border wherever the cursor is */
+  background: radial-gradient(
+    240px circle at var(--mx, 50%) var(--my, 50%),
+    var(--accent),
+    color-mix(in srgb, var(--accent-2) 70%, transparent) 32%,
+    transparent 68%
+  );
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   opacity: 0;
-  transition: opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 0.4s cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
 }
 .glow-border:hover::before {
-  opacity: 0.35;
+  opacity: 0.95;
 }
 
 /* Keyboard key hint */

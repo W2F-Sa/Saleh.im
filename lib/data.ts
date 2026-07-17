@@ -223,6 +223,20 @@ export type Project = {
 
 export const projects: Project[] = [
   {
+    name: "Vanguard",
+    title: { en: "Vanguard — Browser FPS", fa: "ونگارد — تیراندازِ اولِ‌شخصِ مرورگری" },
+    description: {
+      en: "A CoD-style first-person shooter that runs entirely in the browser on a hand-written raycast engine — no WebGL, no downloads. Eleven hitscan weapons, eight large maps, an eight-mission campaign, bots across five difficulty tiers (with an auto-play mode that lets the same brain pilot you), and true peer-to-peer online matches over WebRTC with zero relay/game server in the middle.",
+      fa: "یک تیراندازِ اولِ‌شخصِ کالاف‌محور که کاملاً در مرورگر و روی یک موتورِ ریِ‌کاست دست‌نویس اجرا می‌شود — بدونِ WebGL و بدونِ دانلود. یازده اسلحه‌ی hitscan، هشت نقشه‌ی بزرگ، کمپینِ هشت‌ماموریتی، بات‌ها در پنج سطحِ دشواری (به‌همراهِ حالتِ خودبازی که همان مغزِ هوش‌مصنوعی تو را هم هدایت می‌کند)، و بازیِ آنلاینِ واقعاً همتا‌به‌همتا روی WebRTC بدونِ هیچ سروری در میانه.",
+    },
+    tags: ["Raycaster", "Canvas", "WebRTC P2P", "Bots", "FPS"],
+    href: `${BASE_PATH}/vanguard/`,
+    year: "2026",
+    featured: true,
+    internal: true,
+    accent: true,
+  },
+  {
     name: "Rift",
     title: { en: "Rift — Neon Arena Survival", fa: "ریفت — بقا در آوردگاهِ نئونی" },
     description: {

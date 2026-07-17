@@ -65,6 +65,31 @@ function Preview({ name, accent }: { name: string; accent: boolean }) {
         </div>
       </div>
     );
+  if (name === "Vanguard")
+    return (
+      <svg viewBox="0 0 100 100" className="h-full w-full">
+        {/* first-person raycast corridor: converging wall lines toward a vanishing point */}
+        <defs>
+          <linearGradient id="vgFloor" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor={stroke} stopOpacity="0.05" />
+            <stop offset="1" stopColor={stroke} stopOpacity="0.22" />
+          </linearGradient>
+        </defs>
+        <polygon points="0,100 100,100 62,52 38,52" fill="url(#vgFloor)" />
+        <polygon points="0,0 100,0 62,48 38,48" fill={stroke} opacity="0.08" />
+        {[[0, 0, 38, 48], [100, 0, 62, 48], [0, 100, 38, 52], [100, 100, 62, 52]].map(([x1, y1, x2, y2], i) => (
+          <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={stroke} strokeWidth="1.2" opacity="0.5" vectorEffect="non-scaling-stroke" />
+        ))}
+        <rect x="38" y="48" width="24" height="4" fill="none" stroke={stroke} strokeWidth="1.2" opacity="0.6" vectorEffect="non-scaling-stroke" />
+        {/* crosshair */}
+        <g stroke={stroke} strokeWidth="1.4" vectorEffect="non-scaling-stroke">
+          <line x1="50" y1="42" x2="50" y2="48" />
+          <line x1="50" y1="58" x2="50" y2="52" />
+          <line x1="42" y1="50" x2="48" y2="50" />
+          <line x1="58" y1="50" x2="52" y2="50" />
+        </g>
+      </svg>
+    );
   if (name === "Rift")
     return (
       <svg viewBox="0 0 100 100" className="h-full w-full">

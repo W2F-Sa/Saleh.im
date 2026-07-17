@@ -153,7 +153,7 @@ export function Hero() {
                   <span className="block">Saleh</span>
                   <span className="block">
                     <span className="stroke-text">Sagha</span>
-                    <span className="display-italic gradient-text">fiani</span>
+                    <span className="display-italic gradient-text inline-block pe-[0.16em]">fiani</span>
                   </span>
                 </>
               )}
