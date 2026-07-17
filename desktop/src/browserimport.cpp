@@ -284,9 +284,15 @@ static QVector<Credential> readChromium(const Profile& p, QString& note) {
     QFile::remove(copy);
     if (!QFile::copy(p.loginData, copy)) { note = "Could not read the login database."; return out; }
     QFile::setPermissions(copy, QFile::ReadOwner | QFile::WriteOwner);
-    for (const char* ext : {"-wal", "-shm"}) {
-        const QString src = p.loginData + ext;
-        if (QFile::exists(src)) QFile::copy(src, copy + ext);
+    // Copy ONLY the write-ahead log, never the -shm shared-memory index. A
+    // just-saved Chromium login lives in the -wal until the next checkpoint;
+    // SQLite replays it on open and rebuilds a fresh -shm. Copying a stale
+    // -shm alongside it can make SQLite believe the WAL is already merged and
+    // skip it entirely — which is exactly how a brand-new sign-in goes unseen.
+    QFile::remove(copy + "-shm");
+    {
+        const QString wal = p.loginData + "-wal";
+        if (QFile::exists(wal)) QFile::copy(wal, copy + "-wal");
     }
 
     // candidate decryption keys: keyring secret first, then the "peanuts" default
