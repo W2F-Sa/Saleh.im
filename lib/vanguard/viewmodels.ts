@@ -92,20 +92,44 @@ function fillRR(ctx: Ctx, x: number, y: number, w: number, h: number, r: number,
   ctx.fill();
 }
 
-// A metallic panel: a vertical light→dark→light gradient with a bright top
-// edge highlight, so parts read as rounded steel/polymer.
-function metalRR(ctx: Ctx, x: number, y: number, w: number, h: number, r: number, base: string, lift = 1.35, drop = 0.6) {
+// A machined-metal / polymer panel. Beyond a vertical body gradient it layers
+// a specular highlight band, bottom ambient-occlusion and crisp rim lines, so
+// parts read as genuinely three-dimensional lit surfaces rather than flat fills.
+function metalRR(ctx: Ctx, x: number, y: number, w: number, h: number, r: number, base: string, lift = 1.4, drop = 0.55) {
   const g = ctx.createLinearGradient(0, y, 0, y + h);
   g.addColorStop(0, shade(base, lift));
-  g.addColorStop(0.18, base);
-  g.addColorStop(0.55, shade(base, drop));
-  g.addColorStop(0.85, shade(base, drop * 0.8));
-  g.addColorStop(1, shade(base, drop * 1.25));
+  g.addColorStop(0.14, shade(base, 1.12));
+  g.addColorStop(0.5, base);
+  g.addColorStop(0.82, shade(base, drop));
+  g.addColorStop(1, shade(base, drop * 0.72));
   fillRR(ctx, x, y, w, h, r, g);
-  // top edge highlight
-  roundRectPath(ctx, x, y, w, Math.max(2, h * 0.14), r);
-  ctx.fillStyle = "rgba(255,255,255,0.14)";
-  ctx.fill();
+
+  // clip to the panel so the lighting overlays keep the rounded silhouette
+  ctx.save();
+  roundRectPath(ctx, x, y, w, h, r);
+  ctx.clip();
+  // glossy specular band near the top third
+  const spec = ctx.createLinearGradient(0, y, 0, y + h * 0.5);
+  spec.addColorStop(0, "rgba(255,255,255,0)");
+  spec.addColorStop(0.5, "rgba(255,255,255,0.24)");
+  spec.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = spec;
+  ctx.fillRect(x, y + h * 0.05, w, h * 0.22);
+  // bottom ambient occlusion
+  const ao = ctx.createLinearGradient(0, y + h * 0.55, 0, y + h);
+  ao.addColorStop(0, "rgba(0,0,0,0)");
+  ao.addColorStop(1, "rgba(0,0,0,0.38)");
+  ctx.fillStyle = ao;
+  ctx.fillRect(x, y + h * 0.55, w, h * 0.45);
+  ctx.restore();
+
+  // crisp lit top rim + dark grounded bottom rim
+  const inset = Math.min(r, w / 2);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(255,255,255,0.30)";
+  ctx.beginPath(); ctx.moveTo(x + inset, y + 0.6); ctx.lineTo(x + w - inset, y + 0.6); ctx.stroke();
+  ctx.strokeStyle = "rgba(0,0,0,0.5)";
+  ctx.beginPath(); ctx.moveTo(x + inset, y + h - 0.6); ctx.lineTo(x + w - inset, y + h - 0.6); ctx.stroke();
 }
 
 function screw(ctx: Ctx, x: number, y: number, r: number) {
@@ -153,14 +177,29 @@ function hand(ctx: Ctx, x: number, y: number, w: number, h: number, skin: string
   g.addColorStop(0, shade(skin, 1.18));
   g.addColorStop(1, shade(skin, 0.7));
   fillRR(ctx, x, y, w, h, Math.min(w, h) * 0.42, g);
-  // knuckle ridges
-  ctx.fillStyle = shade(skin, 0.82);
+  // knuckle ridges (padded tactical glove)
+  ctx.fillStyle = shade(skin, 0.86);
   const kn = 4;
   const kw = w / (kn + 0.5);
   for (let i = 0; i < kn; i++) {
     roundRectPath(ctx, x + i * kw + kw * 0.25, y + 2, kw * 0.6, h * 0.34, kw * 0.3);
     ctx.fill();
   }
+  // finger separation creases
+  ctx.strokeStyle = "rgba(0,0,0,0.28)";
+  ctx.lineWidth = Math.max(1, w * 0.02);
+  for (let i = 1; i < kn; i++) {
+    const cx = x + i * kw + kw * 0.0;
+    ctx.beginPath(); ctx.moveTo(cx, y + h * 0.42); ctx.lineTo(cx, y + h * 0.96); ctx.stroke();
+  }
+  // specular sheen across the back of the glove
+  const sh = ctx.createLinearGradient(0, y, 0, y + h * 0.5);
+  sh.addColorStop(0, "rgba(255,255,255,0.16)");
+  sh.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.save(); roundRectPath(ctx, x, y, w, h, Math.min(w, h) * 0.42); ctx.clip();
+  ctx.fillStyle = sh; ctx.fillRect(x, y, w, h * 0.4); ctx.restore();
+  // wrist cuff strap
+  fillRR(ctx, x - w * 0.06, y + h * 0.82, w * 1.12, h * 0.22, w * 0.12, shade(skin, 0.6));
   // thumb
   const tx = flip ? x + w - w * 0.1 : x - w * 0.12;
   fillRR(ctx, tx, y + h * 0.4, w * 0.34, h * 0.5, w * 0.2, g);
@@ -221,6 +260,19 @@ export function drawWeaponViewModel(ctx: Ctx, s: ViewModelState) {
   );
   ctx.scale(scale, scale);
   ctx.rotate(-0.05 + recoil * 0.06 + reloadTilt);
+
+  // Soft contact shadow cast by the weapon onto the view, for depth. Guarded
+  // because ctx.filter is unavailable in a few older engines.
+  if (s.category !== "melee") {
+    ctx.save();
+    try { ctx.filter = "blur(20px)"; } catch { /* no filter support */ }
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = "#000";
+    ctx.beginPath();
+    ctx.ellipse(-20, -96, 330, 96, -0.05, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
 
   const skin = "#b9895c";
   const boltCycle = recoil > 0.05 ? Math.sin(recoil * Math.PI) : 0;

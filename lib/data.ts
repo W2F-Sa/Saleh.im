@@ -286,8 +286,9 @@ export const projects: Project[] = [
       fa: "یک وایت‌بوردِ مشارکتیِ لایو که در آن مکان‌نماها، اشکال و یادداشت‌ها بلافاصله بین همه‌ی افراد اتاق هم‌گام می‌شوند — روی WebRTC و یک CRDT ساخته شده تا ویرایش‌ها هیچ‌وقت تداخل نکنند، حتی آفلاین.",
     },
     tags: ["WebRTC", "CRDT", "Canvas", "Realtime"],
-    href: "https://github.com/im-saleh",
+    href: `${BASE_PATH}/aperture/`,
     year: "2025",
+    internal: true,
   },
   {
     name: "Prism",
@@ -297,8 +298,9 @@ export const projects: Project[] = [
       fa: "یک کتابخانه‌ی کامپوننتِ Reactِ بی‌سر و جعبه‌ابزارِ دیزاین‌سیستم: المان‌های پایه‌ی دسترس‌پذیر، موتورِ تمِ مبتنی بر توکن و استایلِ بدونِ رانتایم — پایه‌ای که برای هر محصولِ جدید سراغش می‌روم.",
     },
     tags: ["React", "Design System", "a11y", "Tokens"],
-    href: "https://github.com/im-saleh",
+    href: `${BASE_PATH}/prism/`,
     year: "2025",
+    internal: true,
   },
   {
     name: "Lumen",
@@ -346,8 +348,9 @@ export const projects: Project[] = [
       fa: "یک مسیریابِ وب‌هوک و اتوماسیونِ سلف‌هاست: رویداد می‌گیرد، تبدیلش می‌کند و با retry و امضا به هر مقصدی می‌فرستد — با یک سازنده‌ی خط لوله‌ی بصریِ تمیز.",
     },
     tags: ["Node.js", "Webhooks", "Queues", "TypeScript"],
-    href: "https://github.com/im-saleh",
+    href: `${BASE_PATH}/relay/`,
     year: "2024",
+    internal: true,
   },
   {
     name: "Pulse",
@@ -357,8 +360,9 @@ export const projects: Project[] = [
       fa: "یک صفحه‌ی وضعیت و مانیتورِ آپ‌تایمِ زیبا: بررسی از چند منطقه، خط‌زمانِ رخدادها، نمودارِ تأخیر و هشدارِ آنی — با یک صفحه‌ی عمومی که کاربرانت واقعاً بهش اعتماد می‌کنند.",
     },
     tags: ["Monitoring", "Charts", "Alerts", "Edge"],
-    href: "https://github.com/im-saleh",
+    href: `${BASE_PATH}/pulse/`,
     year: "2024",
+    internal: true,
   },
   {
     name: "Nota",
@@ -368,8 +372,9 @@ export const projects: Project[] = [
       fa: "یک اپِ یادداشتِ آفلاین‌محور و مبتنی بر مارک‌داون، با جست‌وجوی متنِ کاملِ آنی، لینک‌های دوطرفه و هم‌گام‌سازیِ رمزنگاری‌شده‌ی سرتاسری بین دستگاه‌ها.",
     },
     tags: ["Offline-first", "Markdown", "Search", "Sync"],
-    href: "https://github.com/im-saleh",
+    href: `${BASE_PATH}/nota/`,
     year: "2023",
+    internal: true,
   },
 ];
 

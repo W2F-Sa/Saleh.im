@@ -114,6 +114,11 @@ const SUITE: { name: string; category: string; os: string; path: string; descrip
   { name: "Probe", category: "UtilitiesApplication", os: "Web", path: "/probe", description: "A live connection & privacy inspector: public IP, geolocation, real WebRTC candidate gathering and a device fingerprint surface." },
   { name: "Vanguard", category: "GameApplication", os: "Web", path: "/vanguard", description: "A browser first-person shooter on a hand-written raycast engine with momentum movement — an eight-mission campaign, twelve maps, twenty-one weapons, an undead horde and true peer-to-peer online play." },
   { name: "Rift", category: "GameApplication", os: "Web", path: "/rift", description: "A 60fps neon arena-survival game on a hand-written Canvas engine — escalating waves, deep upgrades, sentries and sector bosses." },
+  { name: "Aperture", category: "DesignApplication", os: "Web", path: "/aperture", description: "A real-time collaborative whiteboard — pen, shapes, sticky notes and text with undo/redo, PNG export and live collaborator cursors." },
+  { name: "Prism", category: "DeveloperApplication", os: "Web", path: "/prism", description: "A headless UI kit and design-system playground: drive design tokens and watch a live component gallery re-theme, then export CSS variables or a Tailwind theme." },
+  { name: "Nota", category: "BusinessApplication", os: "Web", path: "/nota", description: "An offline-first, markdown-native knowledge base with instant full-text search, [[wiki links]] and automatic backlinks — stored locally in your browser." },
+  { name: "Pulse", category: "UtilitiesApplication", os: "Web", path: "/pulse", description: "A status page and uptime monitor that checks HTTP endpoints live from your browser, with real latency, uptime % and an incident timeline." },
+  { name: "Relay", category: "DeveloperApplication", os: "Web", path: "/relay", description: "A visual webhook and event router — transform a JSON event through a pipeline and fan it out to destinations with HMAC-SHA256 signing and retries." },
 ];
 
 const JSON_LD = {

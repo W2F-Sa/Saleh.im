@@ -17,6 +17,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/forge", priority: 0.8, freq: "monthly" },
     { path: "/vanguard", priority: 0.7, freq: "monthly" },
     { path: "/rift", priority: 0.7, freq: "monthly" },
+    { path: "/aperture", priority: 0.7, freq: "monthly" },
+    { path: "/prism", priority: 0.7, freq: "monthly" },
+    { path: "/nota", priority: 0.7, freq: "monthly" },
+    { path: "/pulse", priority: 0.7, freq: "monthly" },
+    { path: "/relay", priority: 0.7, freq: "monthly" },
     { path: "/download", priority: 0.6, freq: "monthly" },
   ];
   return routes.map((r) => ({
