@@ -12,15 +12,15 @@
   Everything is client-side and bilingual.
 */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useLang } from "@/components/lang-provider";
 import { ThemePicker } from "@/components/theme-picker";
 import { LangToggle } from "@/components/lang-toggle";
 
-type StepType = "filter" | "rename" | "set" | "delete" | "delay" | "upper" | "lower" | "template";
-type Step = { id: string; type: StepType; a?: string; b?: string };
-type Dest = { id: string; name: string; url: string; sign: boolean };
+type StepType = "filter" | "rename" | "set" | "delete" | "delay" | "upper" | "lower" | "template" | "number" | "timestamp" | "uuid" | "hash" | "coalesce";
+type Step = { id: string; type: StepType; a?: string; b?: string; off?: boolean };
+type Dest = { id: string; name: string; url: string; sign: boolean; method?: string };
 type StepResult = { step: Step; before: unknown; after: unknown; note?: string; dropped?: boolean };
 type Delivery = { dest: Dest; status: number; ms: number; attempts: number; sig?: string };
 
@@ -46,9 +46,16 @@ async function hmac(secret: string, body: string): Promise<string> {
     return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
   } catch { return "unavailable"; }
 }
+async function sha256(text: string): Promise<string> { try { const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)); return Array.from(new Uint8Array(d)).map((b) => b.toString(16).padStart(2, "0")).join(""); } catch { return "unavailable"; } }
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const STORE = "relay:pipeline:v1";
 
-const SAMPLE = JSON.stringify({ event: "order.created", id: "ord_8f2a", amount: 4200, currency: "usd", customer: { email: "sam@example.com", country: "IR" }, test: false }, null, 2);
+const SAMPLES: Record<string, string> = {
+  "order.created": JSON.stringify({ event: "order.created", id: "ord_8f2a", amount: 4200, currency: "usd", customer: { email: "sam@example.com", country: "IR" }, test: false }, null, 2),
+  "user.signup": JSON.stringify({ event: "user.signup", id: "usr_1c4d", email: "NEW@Example.com", plan: "pro", referral: null, test: false }, null, 2),
+  "payment.failed": JSON.stringify({ event: "payment.failed", id: "pay_77aa", amount: 1999, reason: "card_declined", attempt: 2, test: false }, null, 2),
+};
+const SAMPLE = SAMPLES["order.created"];
 
 export default function RelayPage() {
   const { lang } = useLang();
@@ -75,9 +82,16 @@ export default function RelayPage() {
     ? { back: "بازگشت", brand: "ری‌لِی", tagline: "مسیریابِ رویداد و وب‌هوک", source: "منبع (وب‌هوک)", endpoint: "اندپوینت", secret: "کلیدِ امضا", copy: "کپی", copied: "کپی شد!", sampleEvent: "رویدادِ نمونه (JSON)", steps: "مراحلِ تبدیل", addStep: "افزودن مرحله", dests: "مقصدها", addDest: "افزودن مقصد", run: "اجرا ▶", running: "در حال اجرا…", output: "خروجی در هر مرحله", delivery: "گزارشِ تحویل", dropped: "رویداد این‌جا فیلتر شد و متوقف ماند.", badJson: "JSON نامعتبر است.", noRun: "«اجرا» را بزن تا رویداد را در خط‌لوله ببینی.", filter: "فیلتر", rename: "تغییرِ نام", set: "تنظیمِ فیلد", del: "حذفِ فیلد", delayS: "تأخیر", ifField: "اگر فیلد", equals: "برابرِ", from: "از", to: "به", key: "کلید", value: "مقدار", ms: "میلی‌ثانیه", signed: "امضا", attempts: "تلاش", name: "نام", url: "آدرس", remove: "حذف", passed: "عبور کرد", noSteps: "مرحله‌ای نیست — رویداد بدونِ تغییر عبور می‌کند." }
     : { back: "back", brand: "Relay", tagline: "Event & webhook router", source: "Source (webhook)", endpoint: "Endpoint", secret: "Signing secret", copy: "Copy", copied: "Copied!", sampleEvent: "Sample event (JSON)", steps: "Transform steps", addStep: "Add step", dests: "Destinations", addDest: "Add destination", run: "Run ▶", running: "Running…", output: "Output at each step", delivery: "Delivery log", dropped: "Event was filtered out here and stopped.", badJson: "Invalid JSON.", noRun: "Hit Run to push the event through the pipeline.", filter: "Filter", rename: "Rename", set: "Set field", del: "Delete field", delayS: "Delay", ifField: "if field", equals: "equals", from: "from", to: "to", key: "key", value: "value", ms: "ms", signed: "signed", attempts: "attempts", name: "name", url: "URL", remove: "remove", passed: "passed", noSteps: "No steps — the event passes through unchanged." };
 
-  const stepLabel: Record<StepType, string> = { filter: T.filter, rename: T.rename, set: T.set, delete: T.del, delay: T.delayS, upper: fa ? "بزرگ‌کردن" : "Uppercase", lower: fa ? "کوچک‌کردن" : "Lowercase", template: fa ? "قالب" : "Template" };
+  const stepLabel: Record<StepType, string> = { filter: T.filter, rename: T.rename, set: T.set, delete: T.del, delay: T.delayS, upper: fa ? "بزرگ‌کردن" : "Uppercase", lower: fa ? "کوچک‌کردن" : "Lowercase", template: fa ? "قالب" : "Template", number: fa ? "عدد" : "To number", timestamp: fa ? "زمان" : "Timestamp", uuid: "UUID", hash: fa ? "هش SHA-256" : "SHA-256", coalesce: fa ? "اولین مقدار" : "Coalesce" };
 
-  const addStep = (type: StepType) => setSteps((s) => [...s, { id: uid(), type, a: "", b: type === "delay" ? "250" : "" }]);
+  // Persist the whole pipeline (steps + destinations + sample) locally.
+  useEffect(() => { try { const raw = localStorage.getItem(STORE); if (raw) { const p = JSON.parse(raw); if (p.steps) setSteps(p.steps); if (p.dests) setDests(p.dests); if (typeof p.sample === "string") setSample(p.sample); } } catch {} /* eslint-disable-next-line */ }, []);
+  useEffect(() => { const t = setTimeout(() => { try { localStorage.setItem(STORE, JSON.stringify({ steps, dests, sample })); } catch {} }, 400); return () => clearTimeout(t); }, [steps, dests, sample]);
+
+  const addStep = (type: StepType) => setSteps((s) => [...s, { id: uid(), type, a: "", b: type === "delay" ? "250" : type === "timestamp" ? "routedAt" : type === "uuid" ? "traceId" : "" }]);
+  const dupStep = (id: string) => setSteps((s) => { const i = s.findIndex((x) => x.id === id); if (i < 0) return s; const c = [...s]; c.splice(i + 1, 0, { ...s[i], id: uid() }); return c; });
+  const exportPipeline = () => { const blob = new Blob([JSON.stringify({ steps, dests, sample }, null, 2)], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "relay-pipeline.json"; a.click(); URL.revokeObjectURL(a.href); };
+  const importPipeline = (file: File) => { const r = new FileReader(); r.onload = () => { try { const p = JSON.parse(r.result as string); if (p.steps) setSteps(p.steps); if (p.dests) setDests(p.dests); if (typeof p.sample === "string") setSample(p.sample); } catch {} }; r.readAsText(file); };
   const patchStep = (id: string, patch: Partial<Step>) => setSteps((s) => s.map((x) => (x.id === id ? { ...x, ...patch } : x)));
   const removeStep = (id: string) => setSteps((s) => s.filter((x) => x.id !== id));
   const moveStep = (id: string, dir: -1 | 1) => setSteps((s) => { const i = s.findIndex((x) => x.id === id); const j = i + dir; if (j < 0 || j >= s.length) return s; const c = [...s]; [c[i], c[j]] = [c[j], c[i]]; return c; });
@@ -97,7 +111,18 @@ export default function RelayPage() {
     for (const step of steps) {
       const before = cur;
       let after = cur; let note = ""; let drop = false;
-      if (step.type === "filter") {
+      if (step.off) { res.push({ step, before, after: cur, note: fa ? "(غیرفعال)" : "(disabled)" }); continue; }
+      if (step.type === "number") {
+        if (step.a) { const v = getPath(cur, step.a); const n = Number(v); if (!isNaN(n)) { after = setPath(cur, step.a, n); note = `${step.a} → ${n}`; } }
+      } else if (step.type === "timestamp") {
+        if (step.a) { const ts = new Date().toISOString(); after = setPath(cur, step.a, ts); note = `${step.a} = ${ts}`; }
+      } else if (step.type === "uuid") {
+        if (step.a) { const id = (crypto.randomUUID ? crypto.randomUUID() : uid() + uid()); after = setPath(cur, step.a, id); note = `${step.a} = ${id.slice(0, 8)}…`; }
+      } else if (step.type === "hash") {
+        if (step.a) { const v = getPath(cur, step.a); const h = await sha256(String(v ?? "")); after = setPath(cur, step.a, h); note = `${step.a} → sha256`; }
+      } else if (step.type === "coalesce") {
+        if (step.a) { const paths = (step.b || "").split(",").map((p) => p.trim()).filter(Boolean); let val: any = null; for (const p of paths) { const v = getPath(cur, p); if (v != null && v !== "") { val = v; break; } } after = setPath(cur, step.a, val); note = `${step.a} = ${JSON.stringify(val)}`; }
+      } else if (step.type === "filter") {
         const val = getPath(cur, step.a || "");
         const pass = String(val) === String(coerce(step.b || ""));
         note = `${step.a} = ${JSON.stringify(val)} ${pass ? "✓ " + T.passed : "✕"}`;
@@ -154,8 +179,12 @@ export default function RelayPage() {
     if (s.type === "delete") return (<input value={s.a || ""} onChange={(e) => patchStep(s.id, { a: e.target.value })} placeholder="path.to.remove" className="min-w-0 flex-1 rounded-lg border bg-transparent px-2 py-1 text-sm outline-none force-ltr" style={{ borderColor: "var(--line)" }} />);
     if (s.type === "upper" || s.type === "lower") return (<input value={s.a || ""} onChange={(e) => patchStep(s.id, { a: e.target.value })} placeholder="field.path" className="min-w-0 flex-1 rounded-lg border bg-transparent px-2 py-1 text-sm outline-none force-ltr" style={{ borderColor: "var(--line)" }} />);
     if (s.type === "template") return (<><input value={s.a || ""} onChange={(e) => patchStep(s.id, { a: e.target.value })} placeholder="target.path" className="w-28 rounded-lg border bg-transparent px-2 py-1 text-sm outline-none force-ltr" style={{ borderColor: "var(--line)" }} /><span className="text-xs text-[var(--fg-2)]">=</span><input value={s.b || ""} onChange={(e) => patchStep(s.id, { b: e.target.value })} placeholder="Hi {{customer.email}}" className="min-w-0 flex-1 rounded-lg border bg-transparent px-2 py-1 text-sm outline-none force-ltr" style={{ borderColor: "var(--line)" }} /></>);
+    if (s.type === "number" || s.type === "hash") return (<input value={s.a || ""} onChange={(e) => patchStep(s.id, { a: e.target.value })} placeholder="field.path" className="min-w-0 flex-1 rounded-lg border bg-transparent px-2 py-1 text-sm outline-none force-ltr" style={{ borderColor: "var(--line)" }} />);
+    if (s.type === "timestamp" || s.type === "uuid") return (<input value={s.a || ""} onChange={(e) => patchStep(s.id, { a: e.target.value })} placeholder="target.field" className="min-w-0 flex-1 rounded-lg border bg-transparent px-2 py-1 text-sm outline-none force-ltr" style={{ borderColor: "var(--line)" }} />);
+    if (s.type === "coalesce") return (<><input value={s.a || ""} onChange={(e) => patchStep(s.id, { a: e.target.value })} placeholder="target" className="w-28 rounded-lg border bg-transparent px-2 py-1 text-sm outline-none force-ltr" style={{ borderColor: "var(--line)" }} /><span className="text-xs text-[var(--fg-2)]">=</span><input value={s.b || ""} onChange={(e) => patchStep(s.id, { b: e.target.value })} placeholder="a.path, b.path" className="min-w-0 flex-1 rounded-lg border bg-transparent px-2 py-1 text-sm outline-none force-ltr" style={{ borderColor: "var(--line)" }} /></>);
     return (<><input value={s.b || ""} onChange={(e) => patchStep(s.id, { b: e.target.value })} type="number" className="w-24 rounded-lg border bg-transparent px-2 py-1 text-sm outline-none" style={{ borderColor: "var(--line)" }} /><span className="text-xs text-[var(--fg-2)]">{T.ms}</span></>);
   };
+  const importRef = useRef<HTMLInputElement>(null);
 
   return (
     <div className="min-h-[100dvh]" style={{ background: "var(--bg)", color: "var(--fg)" }}>
@@ -191,7 +220,10 @@ export default function RelayPage() {
               <button onClick={() => copy(secret)} className="rounded-md border px-2 py-0.5" style={{ borderColor: "var(--line-2)" }}>{copied ? "✓" : T.copy}</button>
             </div>
             <div className="mt-3">
-              <div className="label mb-1.5">{T.sampleEvent}</div>
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="label">{T.sampleEvent}</span>
+                <div className="flex gap-1">{Object.keys(SAMPLES).map((k) => <button key={k} onClick={() => setSample(SAMPLES[k])} className="rounded-full border px-2 py-0.5 text-[10px] mono force-ltr" style={{ borderColor: "var(--line-2)", color: "var(--fg-2)" }}>{k}</button>)}</div>
+              </div>
               <textarea value={sample} onChange={(e) => setSample(e.target.value)} rows={9} className="w-full resize-none rounded-xl border p-3 mono text-[12.5px] leading-relaxed outline-none force-ltr thin-scroll" style={{ background: "var(--bg-3)", borderColor: err ? "#ff6a6a" : "var(--line)" }} />
               {err && <p className="mt-1 text-xs" style={{ color: "#ff6a6a" }}>{err}</p>}
             </div>
@@ -203,11 +235,13 @@ export default function RelayPage() {
             <div className="space-y-2">
               {steps.length === 0 && <p className="text-xs text-[var(--fg-2)]">{T.noSteps}</p>}
               {steps.map((s, i) => (
-                <div key={s.id} className="rounded-xl border p-2.5" style={{ borderColor: "var(--line)", background: "var(--bg-3)" }}>
+                <div key={s.id} className="rounded-xl border p-2.5" style={{ borderColor: "var(--line)", background: "var(--bg-3)", opacity: s.off ? 0.5 : 1 }}>
                   <div className="mb-2 flex items-center gap-2">
                     <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[11px] font-bold" style={{ background: "var(--accent)", color: "var(--on-accent)" }}>{i + 1}</span>
                     <span className="text-sm font-semibold">{stepLabel[s.type]}</span>
                     <div className="ms-auto flex gap-1">
+                      <button onClick={() => patchStep(s.id, { off: !s.off })} className="grid h-6 w-6 place-items-center rounded border text-xs" style={{ borderColor: "var(--line-2)" }} title={s.off ? (fa ? "فعال" : "Enable") : (fa ? "غیرفعال" : "Disable")}>{s.off ? "○" : "◉"}</button>
+                      <button onClick={() => dupStep(s.id)} className="grid h-6 w-6 place-items-center rounded border text-xs" style={{ borderColor: "var(--line-2)" }} title={fa ? "تکثیر" : "Duplicate"}>⧉</button>
                       <button onClick={() => moveStep(s.id, -1)} className="grid h-6 w-6 place-items-center rounded border text-xs" style={{ borderColor: "var(--line-2)" }}>↑</button>
                       <button onClick={() => moveStep(s.id, 1)} className="grid h-6 w-6 place-items-center rounded border text-xs" style={{ borderColor: "var(--line-2)" }}>↓</button>
                       <button onClick={() => removeStep(s.id)} className="grid h-6 w-6 place-items-center rounded border text-xs text-[var(--fg-2)] hover:text-[#ff6a6a]" style={{ borderColor: "var(--line-2)" }}>✕</button>
@@ -218,7 +252,12 @@ export default function RelayPage() {
               ))}
             </div>
             <div className="mt-3 flex flex-wrap gap-1.5">
-              {(["filter", "rename", "set", "delete", "delay", "upper", "lower", "template"] as StepType[]).map((t) => <button key={t} onClick={() => addStep(t)} className="rounded-full border px-2.5 py-1 text-xs transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]" style={{ borderColor: "var(--line-2)" }}>+ {stepLabel[t]}</button>)}
+              {(["filter", "rename", "set", "delete", "delay", "upper", "lower", "template", "number", "timestamp", "uuid", "hash", "coalesce"] as StepType[]).map((t) => <button key={t} onClick={() => addStep(t)} className="rounded-full border px-2.5 py-1 text-xs transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]" style={{ borderColor: "var(--line-2)" }}>+ {stepLabel[t]}</button>)}
+            </div>
+            <div className="mt-2 flex gap-1.5">
+              <button onClick={exportPipeline} className="rounded-lg border px-2.5 py-1 text-xs" style={{ borderColor: "var(--line-2)" }}>↓ {fa ? "ذخیرهٔ خط‌لوله" : "Save pipeline"}</button>
+              <button onClick={() => importRef.current?.click()} className="rounded-lg border px-2.5 py-1 text-xs" style={{ borderColor: "var(--line-2)" }}>↑ {fa ? "بازکردن" : "Load"}</button>
+              <input ref={importRef} type="file" accept="application/json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importPipeline(f); e.currentTarget.value = ""; }} />
             </div>
           </div>
 
@@ -230,6 +269,7 @@ export default function RelayPage() {
                 <div key={d.id} className="flex flex-wrap items-center gap-2 rounded-xl border p-2.5" style={{ borderColor: "var(--line)", background: "var(--bg-3)" }}>
                   <input value={d.name} onChange={(e) => patchDest(d.id, { name: e.target.value })} className="w-28 rounded-lg border bg-transparent px-2 py-1 text-sm outline-none" style={{ borderColor: "var(--line)" }} />
                   <input value={d.url} onChange={(e) => patchDest(d.id, { url: e.target.value })} className="min-w-0 flex-1 rounded-lg border bg-transparent px-2 py-1 text-xs outline-none force-ltr" style={{ borderColor: "var(--line)" }} />
+                  <select value={d.method || "POST"} onChange={(e) => patchDest(d.id, { method: e.target.value })} className="rounded-lg border bg-transparent px-1 py-1 text-[11px] outline-none" style={{ borderColor: "var(--line)" }}><option>POST</option><option>PUT</option><option>PATCH</option><option>GET</option></select>
                   <button onClick={() => patchDest(d.id, { sign: !d.sign })} className="rounded-full px-2 py-1 text-[11px] font-medium" style={{ background: d.sign ? "var(--accent)" : "var(--bg-2)", color: d.sign ? "var(--on-accent)" : "var(--fg-2)" }}>HMAC</button>
                   <button onClick={() => removeDest(d.id)} className="grid h-7 w-7 place-items-center rounded border text-xs text-[var(--fg-2)] hover:text-[#ff6a6a]" style={{ borderColor: "var(--line-2)" }}>✕</button>
                 </div>
@@ -259,7 +299,10 @@ export default function RelayPage() {
                   ))}
                 </ol>
                 {finalOut != null && (
-                  <pre className="mt-3 max-h-56 overflow-auto rounded-xl border p-3 mono text-[12px] thin-scroll force-ltr" style={{ borderColor: "var(--line)", background: "var(--bg-3)" }}>{pretty(finalOut)}</pre>
+                  <div className="mt-3">
+                    <div className="mb-1 flex justify-end"><button onClick={() => copy(pretty(finalOut))} className="rounded-md border px-2 py-0.5 text-[11px]" style={{ borderColor: "var(--line-2)" }}>{copied ? "✓" : (fa ? "کپیِ خروجی" : "Copy output")}</button></div>
+                    <pre className="max-h-56 overflow-auto rounded-xl border p-3 mono text-[12px] thin-scroll force-ltr" style={{ borderColor: "var(--line)", background: "var(--bg-3)" }}>{pretty(finalOut)}</pre>
+                  </div>
                 )}
               </div>
 
@@ -272,6 +315,7 @@ export default function RelayPage() {
                         <div className="flex items-center gap-2 text-sm">
                           <span className="h-2 w-2 rounded-full" style={{ background: d.status === 200 ? "#22c55e" : "#ef4444" }} />
                           <b>{d.dest.name}</b>
+                          <span className="mono rounded px-1 py-0.5 text-[10px] text-[var(--fg-2)]" style={{ background: "var(--bg-2)" }}>{d.dest.method || "POST"}</span>
                           <span className="mono rounded px-1.5 py-0.5 text-[11px]" style={{ background: d.status === 200 ? "#22c55e22" : "#ef444422", color: d.status === 200 ? "#22c55e" : "#ef4444" }}>{d.status}</span>
                           <span className="mono ms-auto text-xs text-[var(--fg-2)]">{d.ms}ms · {d.attempts} {T.attempts}</span>
                         </div>

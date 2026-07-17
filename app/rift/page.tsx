@@ -258,29 +258,38 @@ export default function RiftPage() {
     <div className="relative h-[100dvh] w-full overflow-hidden select-none" style={{ background: "var(--bg)" }}>
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" />
 
-      {/* top bar */}
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 p-3 sm:p-4">
-        <div className="pointer-events-auto flex items-center gap-2">
-          <Link href="/" className="glass flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-[var(--fg-2)] hover:text-[var(--fg)]" style={{ border: "1px solid var(--line)" }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m15 18-6-6 6-6" /></svg>
-            saleh.im
-          </Link>
-          <span className="glass rounded-full px-3 py-1.5 text-xs font-semibold" style={{ border: "1px solid var(--line)" }}>◈ Rift</span>
-        </div>
-        {playing && (
-          <div className="pointer-events-none flex flex-wrap items-center justify-end gap-2 text-xs">
+      {/* In-game status pills (only while playing). Kept below the menu
+          overlays so they never fight for clicks. */}
+      {playing && (
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-center gap-2 p-3 text-xs sm:p-4">
+          <div className="flex flex-wrap items-center justify-center gap-2">
             {practiceMode && <span className="glass rounded-full px-3 py-1.5 mono font-bold" style={{ border: "1px solid var(--accent)", color: "var(--accent)" }}>{T.practice}</span>}
             <span className="glass rounded-full px-3 py-1.5 mono" style={{ border: "1px solid var(--line)" }}>{T.sector} {hud.sector} · {T.wave} {hud.wave}/6</span>
             <span className="glass rounded-full px-3 py-1.5 mono" style={{ border: "1px solid var(--line)", color: "var(--accent)" }}>◆ {hud.gold}</span>
             <span className="glass hidden rounded-full px-3 py-1.5 mono sm:block" style={{ border: "1px solid var(--line)" }}>{T.lv} {hud.level}</span>
           </div>
-        )}
+        </div>
+      )}
+
+      {/* Top-bar controls — a dedicated cluster at the highest z-index so the
+          back link, pause, language, dark/light and theme controls are ALWAYS
+          clickable, even above the menu / shop / pause / game-over overlays
+          (which sit at z-30). This was the bug: the old header was z-20 and got
+          covered by those overlays, so the toggles did nothing on the menu. */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-[70] flex items-start justify-between gap-3 p-3 sm:p-4">
+        <div className="pointer-events-auto flex items-center gap-2">
+          <Link href="/" className="glass flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-[var(--fg-2)] hover:text-[var(--fg)]" style={{ border: "1px solid var(--line)" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m15 18-6-6 6-6" /></svg>
+            saleh.im
+          </Link>
+          <span className="glass hidden rounded-full px-3 py-1.5 text-xs font-semibold sm:inline" style={{ border: "1px solid var(--line)" }}>◈ Rift</span>
+        </div>
         <div className="pointer-events-auto flex items-center gap-2">
           {gs === "playing" && <button onClick={() => g()?.togglePause()} className="glass grid h-9 w-9 place-items-center rounded-full" style={{ border: "1px solid var(--line)" }} aria-label="Pause"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg></button>}
           <LangToggle />
           <ThemePicker />
         </div>
-      </header>
+      </div>
 
       {/* bottom HUD bars */}
       {playing && (
