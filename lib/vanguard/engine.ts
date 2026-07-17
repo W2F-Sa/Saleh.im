@@ -355,6 +355,11 @@ export class VanguardEngine {
   private mouseDX = 0;
   private pointerLocked = false;
   private sensitivity = 0.0022;
+  // Forgiving jump timers so jumping feels responsive instead of dropping
+  // inputs: coyote-time lets you still jump a beat after walking off an edge,
+  // and the jump buffer fires a jump you pressed just before landing.
+  private coyoteT = 0;
+  private jumpBufferT = 0;
 
   private killFeed: KillFeedEntry[] = [];
   private nextKillId = 1;
@@ -537,6 +542,9 @@ export class VanguardEngine {
     this.keys.add(k);
     // Space (jump) and the arrow keys would otherwise scroll the page.
     if (k === " " || k === "spacebar" || k.startsWith("arrow")) e.preventDefault();
+    // Buffer the jump on the key event itself so a jump pressed a hair before
+    // landing still fires the instant we touch down.
+    if (k === " " || k === "spacebar") this.jumpBufferT = 0.14;
     if (k === "r") this.requestReload();
     if (k === "q") this.swapWeapon();
     if (k === "escape") this.releasePointer();
@@ -786,9 +794,14 @@ export class VanguardEngine {
     a.velX += (wishX - a.velX) * k;
     a.velY += (wishY - a.velY) * k;
 
-    // Jump — only from the ground.
-    if ((this.keys.has(" ") || this.keys.has("spacebar")) && onGround && a.velZ === 0) {
+    // Jump — with coyote-time + input buffering so it never feels dropped.
+    if (onGround) this.coyoteT = 0.1; else this.coyoteT = Math.max(0, this.coyoteT - dt);
+    if (this.jumpBufferT > 0) this.jumpBufferT = Math.max(0, this.jumpBufferT - dt);
+    const holdingJump = this.keys.has(" ") || this.keys.has("spacebar");
+    if ((this.jumpBufferT > 0 || holdingJump) && this.coyoteT > 0 && a.velZ <= 0) {
       a.velZ = JUMP_VELOCITY;
+      this.coyoteT = 0;
+      this.jumpBufferT = 0;
       this.audio.play("pickup", 0.25);
     }
 
@@ -890,6 +903,12 @@ export class VanguardEngine {
 
   private integrateActor(a: Actor, dt: number) {
     if (a.isRemote) return; // net.ts positions remote actors directly
+    // Defensive: a stray NaN in velocity/height would otherwise freeze the
+    // actor in place forever (onGround compares against NaN). Scrub it.
+    if (!Number.isFinite(a.velX)) a.velX = 0;
+    if (!Number.isFinite(a.velY)) a.velY = 0;
+    if (!Number.isFinite(a.velZ)) a.velZ = 0;
+    if (!Number.isFinite(a.z)) a.z = 0;
     const nx = a.x + a.velX * dt;
     const ny = a.y + a.velY * dt;
 
@@ -1721,170 +1740,329 @@ export class VanguardEngine {
     const moving = Math.hypot(actor.velX, actor.velY) > 0.1;
     const phase = zombie ? actor.gaitPhase : actor.bobPhase;
     const swing = moving ? Math.sin(phase) : 0;
+    const swing2 = moving ? Math.sin(phase + Math.PI) : 0; // opposite leg/arm
     const feetY = top + sh;
     const hurt = actor.hurtFlash > 0;
+    // Airborne height in "sprite units" so a jumping actor lifts off the floor
+    // and casts a smaller, fainter shadow beneath its feet.
+    const air = (actor.z || 0);
+    const near = sh > 150; // draw extra fine detail only when the sprite is big
+
+    // rounded-rect helper (kept local so the sprite stays self-contained)
+    const rr = (x: number, y: number, ww: number, hh: number, r: number) => {
+      const rad = Math.min(r, ww / 2, hh / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + rad, y);
+      ctx.arcTo(x + ww, y, x + ww, y + hh, rad);
+      ctx.arcTo(x + ww, y + hh, x, y + hh, rad);
+      ctx.arcTo(x, y + hh, x, y, rad);
+      ctx.arcTo(x, y, x + ww, y, rad);
+      ctx.closePath();
+    };
 
     ctx.save();
 
-    // ground shadow
-    ctx.globalAlpha = 0.3;
+    // ground shadow — shrinks + fades as the actor rises into a jump
+    const shadowScale = 1 / (1 + air * 1.6);
+    ctx.globalAlpha = 0.32 * shadowScale;
     ctx.fillStyle = "#000";
     ctx.beginPath();
-    ctx.ellipse(cx, feetY, sw * 0.55, Math.max(2, sh * 0.05), 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, feetY, sw * 0.55 * shadowScale, Math.max(1.5, sh * 0.05 * shadowScale), 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
 
-    // soft rim glow behind the body
+    // soft rim glow behind the body (team / undead colour)
     ctx.save();
-    ctx.globalAlpha = 0.35;
+    ctx.globalAlpha = 0.32;
     ctx.shadowColor = glow;
-    ctx.shadowBlur = Math.min(22, sh * 0.18);
+    ctx.shadowBlur = Math.min(24, sh * 0.2);
     ctx.fillStyle = glow;
-    ctx.fillRect(cx - sw * 0.28, top + sh * 0.2, sw * 0.56, sh * 0.6);
+    rr(cx - sw * 0.26, top + sh * 0.18, sw * 0.52, sh * 0.64, sw * 0.2);
+    ctx.fill();
     ctx.restore();
 
-    const skin = hurt ? "#ffffff" : zombie ? "#8fa663" : "#c6a06e";
-    const cloth = hurt ? "#ffffff" : zombie ? "#3f5a34" : actor.team === 0 ? "#2f5fd0" : "#b0322c";
-    const clothDark = shadeColor(cloth, 0.6);
-    const gear = zombie ? "#2b3a24" : "#20242b";
+    const skin = hurt ? "#ffffff" : zombie ? "#93a86a" : "#caa574";
+    const skinDark = shadeColor(skin, 0.72);
+    const cloth = hurt ? "#ffffff" : zombie ? "#415836" : actor.team === 0 ? "#2f5fd0" : "#b23029";
+    const clothMid = shadeColor(cloth, 0.82);
+    const clothDark = shadeColor(cloth, 0.55);
+    const gear = zombie ? "#26331f" : "#191d24";
 
     const legTop = top + sh * 0.6;
     const legLen = sh * 0.4;
-    const legW = sw * 0.16;
-    const torsoW = sw * (zombie ? 0.42 : 0.5);
+    const thighLen = legLen * 0.52;
+    const legW = sw * 0.17;
+    const torsoW = sw * (zombie ? 0.44 : 0.52);
     const torsoTop = top + sh * (zombie ? 0.28 : 0.24);
     const torsoBot = legTop + 1;
-    const headR = sh * (zombie ? 0.085 : 0.09);
-    // Zombies hunch forward, so the head leans off-centre and sits lower.
-    const headCX = cx + (zombie ? sw * 0.1 * (1 + 0.2 * Math.sin(phase * 0.7)) : 0);
-    const headCY = top + sh * (zombie ? 0.2 : 0.13);
+    const torsoH = torsoBot - torsoTop;
+    const headR = sh * (zombie ? 0.088 : 0.092);
+    const lean = zombie ? sw * 0.1 * (1 + 0.2 * Math.sin(phase * 0.7)) : 0;
+    const headCX = cx + lean;
+    const headCY = top + sh * (zombie ? 0.2 : 0.125);
 
-    // legs (animated stride)
-    ctx.fillStyle = clothDark;
-    const legOff = swing * sw * 0.14;
-    ctx.fillRect(cx - torsoW * 0.42 - legW / 2 + legOff, legTop, legW, legLen);
-    ctx.fillRect(cx + torsoW * 0.42 - legW / 2 - legOff, legTop, legW, legLen);
-
-    // torso
-    ctx.fillStyle = cloth;
-    ctx.fillRect(cx - torsoW / 2, torsoTop, torsoW, torsoBot - torsoTop);
-    // chest rig / tatters
-    ctx.fillStyle = gear;
-    if (zombie) {
-      ctx.globalAlpha = 0.8;
-      for (let i = 0; i < 3; i++) ctx.fillRect(cx - torsoW / 2 + torsoW * (0.15 + i * 0.3), torsoTop + sh * 0.05, torsoW * 0.08, (torsoBot - torsoTop) * (0.5 + 0.2 * i));
-      ctx.globalAlpha = 1;
-    } else {
-      ctx.fillRect(cx - torsoW / 2, torsoTop + sh * 0.1, torsoW, sh * 0.06);
-    }
-
-    // arms
-    const armW = sw * 0.13;
-    const armLen = sh * (zombie ? 0.34 : 0.3);
-    ctx.fillStyle = cloth;
-    if (zombie) {
-      // outstretched, reaching toward the viewer, with a hungry sway
-      const reach = sw * 0.34 + Math.sin(phase) * sw * 0.05;
-      ctx.save();
-      ctx.translate(cx, torsoTop + sh * 0.05);
-      ctx.rotate(0.5);
-      ctx.fillRect(-armW / 2, 0, armW, armLen);
-      ctx.restore();
-      ctx.save();
-      ctx.translate(cx, torsoTop + sh * 0.02);
-      ctx.rotate(-0.35);
-      ctx.fillRect(-armW / 2, 0, armW, armLen);
-      ctx.restore();
-      // reaching hands
-      ctx.fillStyle = skin;
+    // ---- LEGS: thigh + shin with a bent knee, so the stride reads as walking
+    const drawLeg = (footOff: number, s: number) => {
+      const hipX = cx + footOff;
+      const kneeX = hipX + s * sw * 0.05;
+      const kneeY = legTop + thighLen;
+      const footX = hipX - s * sw * 0.03;
+      const bootY = legTop + legLen;
+      ctx.strokeStyle = clothDark;
+      ctx.lineWidth = legW;
+      ctx.lineCap = "round";
       ctx.beginPath();
-      ctx.arc(cx - reach * 0.4, torsoTop + sh * 0.28, armW * 0.6, 0, Math.PI * 2);
-      ctx.arc(cx + reach * 0.5, torsoTop + sh * 0.24, armW * 0.6, 0, Math.PI * 2);
+      ctx.moveTo(hipX, legTop);
+      ctx.lineTo(kneeX, kneeY);
+      ctx.lineTo(footX, bootY - sh * 0.03);
+      ctx.stroke();
+      // combat boot
+      ctx.fillStyle = "#0d1015";
+      rr(footX - legW * 0.62, bootY - sh * 0.045, legW * 1.35, sh * 0.05, sh * 0.015);
+      ctx.fill();
+    };
+    drawLeg(-torsoW * 0.26, swing);
+    drawLeg(torsoW * 0.26, swing2);
+
+    // ---- TORSO with vertical + side-light gradient for volume
+    const tg = ctx.createLinearGradient(cx - torsoW / 2, 0, cx + torsoW / 2, 0);
+    tg.addColorStop(0, clothDark);
+    tg.addColorStop(0.5, cloth);
+    tg.addColorStop(1, clothMid);
+    ctx.fillStyle = tg;
+    if (zombie) {
+      // hunched, slightly narrower torso leaning toward the viewer
+      ctx.save();
+      ctx.translate(cx, torsoTop + torsoH / 2);
+      ctx.rotate(0.06 * Math.sin(phase * 0.5));
+      rr(-torsoW / 2, -torsoH / 2, torsoW, torsoH, sw * 0.06);
+      ctx.fill();
+      ctx.restore();
+    } else {
+      rr(cx - torsoW / 2, torsoTop, torsoW, torsoH, sw * 0.08);
+      ctx.fill();
+    }
+    // subtle top-down ambient shade on the torso
+    const ao = ctx.createLinearGradient(0, torsoTop, 0, torsoBot);
+    ao.addColorStop(0, "rgba(255,255,255,0.12)");
+    ao.addColorStop(0.35, "rgba(255,255,255,0)");
+    ao.addColorStop(1, "rgba(0,0,0,0.28)");
+    ctx.fillStyle = ao;
+    rr(cx - torsoW / 2, torsoTop, torsoW, torsoH, sw * 0.08);
+    ctx.fill();
+
+    if (zombie) {
+      // torn shirt flaps + exposed ribs + dark blood soak
+      ctx.fillStyle = "rgba(0,0,0,0.28)";
+      for (let i = 0; i < 4; i++) {
+        const rx = cx - torsoW / 2 + torsoW * (0.12 + i * 0.24);
+        ctx.beginPath();
+        ctx.moveTo(rx, torsoTop + torsoH * 0.45);
+        ctx.lineTo(rx + torsoW * 0.05, torsoBot);
+        ctx.lineTo(rx - torsoW * 0.05, torsoBot);
+        ctx.fill();
+      }
+      // pale ribs peeking through a gash
+      ctx.strokeStyle = "rgba(210,205,180,0.5)";
+      ctx.lineWidth = Math.max(1, sh * 0.006);
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(cx - torsoW * 0.12, torsoTop + torsoH * (0.35 + i * 0.12));
+        ctx.lineTo(cx + torsoW * 0.16, torsoTop + torsoH * (0.32 + i * 0.12));
+        ctx.stroke();
+      }
+      ctx.fillStyle = "rgba(90,12,12,0.55)";
+      ctx.beginPath();
+      ctx.ellipse(cx - torsoW * 0.05, torsoTop + torsoH * 0.5, torsoW * 0.22, torsoH * 0.3, 0, 0, Math.PI * 2);
       ctx.fill();
     } else {
-      ctx.fillRect(cx - torsoW / 2 - armW * 0.6, torsoTop + sh * 0.02, armW, armLen);
-      ctx.fillRect(cx + torsoW / 2 - armW * 0.4, torsoTop + sh * 0.02, armW, armLen);
-      // a slung rifle across the chest
-      ctx.fillStyle = "#15181d";
+      // plate carrier + magazine pouches + team belt
+      ctx.fillStyle = gear;
+      rr(cx - torsoW * 0.42, torsoTop + torsoH * 0.12, torsoW * 0.84, torsoH * 0.5, sw * 0.04);
+      ctx.fill();
+      ctx.fillStyle = shadeColor(gear, 1.5);
+      for (let i = 0; i < 3; i++) {
+        rr(cx - torsoW * 0.3 + i * torsoW * 0.22, torsoTop + torsoH * 0.2, torsoW * 0.16, torsoH * 0.24, sw * 0.02);
+        ctx.fill();
+      }
+      // team armband
+      ctx.fillStyle = actor.team === 0 ? "#7dd3fc" : "#fca5a5";
+      rr(cx - torsoW / 2 - sw * 0.02, torsoTop + torsoH * 0.06, sw * 0.06, torsoH * 0.18, sw * 0.02);
+      ctx.fill();
+    }
+
+    // ---- ARMS + weapon
+    const armW = sw * 0.14;
+    if (zombie) {
+      const reachSway = Math.sin(phase) * sw * 0.06;
+      const drawArm = (baseAng: number, off: number) => {
+        ctx.save();
+        ctx.translate(cx + off, torsoTop + torsoH * 0.14);
+        ctx.rotate(baseAng + 0.12 * Math.sin(phase + off));
+        ctx.strokeStyle = clothMid;
+        ctx.lineWidth = armW;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(0, sh * 0.2);
+        ctx.lineTo(sw * 0.04, sh * 0.36);
+        ctx.stroke();
+        // rotting hand / claw
+        ctx.fillStyle = skinDark;
+        ctx.beginPath();
+        ctx.arc(sw * 0.04, sh * 0.37, armW * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      };
+      drawArm(0.55, -torsoW * 0.12 + reachSway);
+      drawArm(-0.4, torsoW * 0.12 + reachSway);
+    } else {
+      // both arms hold a rifle levelled toward the viewer; recoil jitters it
+      const kick = clamp(actor.recoilKick, 0, 1);
+      const gunY = torsoTop + torsoH * 0.2;
+      const gunLen = sw * 0.62;
       ctx.save();
-      ctx.translate(cx, torsoTop + sh * 0.12);
-      ctx.rotate(-0.35);
-      ctx.fillRect(-sw * 0.05, -sh * 0.02, sw * 0.5, sh * 0.05);
+      ctx.translate(cx, gunY);
+      ctx.rotate(-0.04 + kick * 0.05 * Math.sin(this.matchTime * 40));
+      // back arm
+      ctx.strokeStyle = clothMid;
+      ctx.lineWidth = armW;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(-torsoW * 0.34, -torsoH * 0.02);
+      ctx.lineTo(sw * 0.04, sh * 0.02);
+      ctx.stroke();
+      // rifle body
+      ctx.fillStyle = "#15181d";
+      rr(-sw * 0.04, -sh * 0.02 - kick * sh * 0.01, gunLen, sh * 0.045, sh * 0.01);
+      ctx.fill();
+      ctx.fillStyle = "#0b0d10";
+      rr(-sw * 0.02, sh * 0.02, sw * 0.06, sh * 0.09, sh * 0.008); ctx.fill(); // magazine
+      rr(-sw * 0.06, -sh * 0.05, sw * 0.05, sh * 0.05, sh * 0.006); ctx.fill(); // stock
+      // front hand on the foregrip
+      ctx.fillStyle = skin;
+      ctx.beginPath();
+      ctx.arc(gunLen * 0.55, sh * 0.01, armW * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+      // muzzle flash at the barrel tip while firing
+      if (actor.fireCooldown > 0 && kick > 0.04) {
+        const mzx = gunLen + sw * 0.02;
+        ctx.globalAlpha = kick;
+        const mg = ctx.createRadialGradient(mzx, sh * 0.005, 1, mzx, sh * 0.005, sh * 0.11);
+        mg.addColorStop(0, "#fffdf0"); mg.addColorStop(0.45, "#ffbe2e"); mg.addColorStop(1, "transparent");
+        ctx.fillStyle = mg;
+        ctx.beginPath(); ctx.arc(mzx, sh * 0.005, sh * 0.11, 0, Math.PI * 2); ctx.fill();
+        // star spikes
+        ctx.strokeStyle = "#fff2c0";
+        ctx.lineWidth = Math.max(1, sh * 0.01);
+        for (let i = 0; i < 4; i++) {
+          const an = i * Math.PI / 2 + 0.4;
+          ctx.beginPath();
+          ctx.moveTo(mzx, sh * 0.005);
+          ctx.lineTo(mzx + Math.cos(an) * sh * 0.13, sh * 0.005 + Math.sin(an) * sh * 0.13);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      }
       ctx.restore();
     }
 
-    // head
-    ctx.fillStyle = skin;
+    // ---- HEAD
+    const hg = ctx.createRadialGradient(headCX - headR * 0.35, headCY - headR * 0.35, headR * 0.2, headCX, headCY, headR * 1.1);
+    hg.addColorStop(0, shadeColor(skin, 1.12));
+    hg.addColorStop(1, skinDark);
+    ctx.fillStyle = hg;
     ctx.beginPath();
     ctx.arc(headCX, headCY, headR, 0, Math.PI * 2);
     ctx.fill();
+
     if (zombie) {
-      // glowing eyes
-      ctx.fillStyle = "#d9f871";
-      ctx.shadowColor = "#eaff6b";
-      ctx.shadowBlur = 8;
+      // gaunt shading + asymmetric glowing eyes + open, drooling jaw
+      ctx.fillStyle = "rgba(40,60,25,0.55)";
       ctx.beginPath();
-      ctx.arc(headCX - headR * 0.35, headCY - headR * 0.1, headR * 0.2, 0, Math.PI * 2);
-      ctx.arc(headCX + headR * 0.35, headCY - headR * 0.1, headR * 0.2, 0, Math.PI * 2);
+      ctx.arc(headCX + headR * 0.3, headCY + headR * 0.1, headR * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#e6ff5a";
+      ctx.shadowColor = "#eaff6b";
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(headCX - headR * 0.36, headCY - headR * 0.08, headR * 0.2, 0, Math.PI * 2);
+      ctx.arc(headCX + headR * 0.32, headCY - headR * 0.02, headR * 0.14, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
-    } else {
-      // helmet
-      ctx.fillStyle = shadeColor(cloth, 0.5);
-      ctx.beginPath();
-      ctx.arc(headCX, headCY - headR * 0.2, headR * 1.12, Math.PI, Math.PI * 2);
+      // jaw + a thread of drool
+      ctx.fillStyle = "#2a0f0f";
+      rr(headCX - headR * 0.42, headCY + headR * 0.3, headR * 0.84, headR * 0.5, headR * 0.12);
       ctx.fill();
-    }
-
-    // boots
-    ctx.fillStyle = "#0e1116";
-    ctx.fillRect(cx - torsoW * 0.42 - legW / 2 + legOff, legTop + legLen - sh * 0.05, legW * 1.15, sh * 0.05);
-    ctx.fillRect(cx + torsoW * 0.42 - legW / 2 - legOff, legTop + legLen - sh * 0.05, legW * 1.15, sh * 0.05);
-
-    if (!zombie) {
-      // shoulder pads
-      ctx.fillStyle = shadeColor(cloth, 0.72);
-      ctx.fillRect(cx - torsoW / 2 - armW * 0.25, torsoTop - sh * 0.008, torsoW * 0.3, sh * 0.05);
-      ctx.fillRect(cx + torsoW / 2 - torsoW * 0.3 + armW * 0.25, torsoTop - sh * 0.008, torsoW * 0.3, sh * 0.05);
-      // helmet visor band + chin strap
-      ctx.fillStyle = "rgba(10,14,20,0.9)";
-      ctx.fillRect(headCX - headR, headCY - headR * 0.12, headR * 2, headR * 0.42);
-      // muzzle flash + short barrel when firing
-      if (actor.fireCooldown > 0 && actor.recoilKick > 0.05) {
-        const mzx = headCX + sw * 0.3;
-        const mzy = torsoTop + sh * 0.06;
-        ctx.fillStyle = "#15181d";
-        ctx.fillRect(headCX + sw * 0.06, mzy - sh * 0.012, sw * 0.26, sh * 0.03);
-        ctx.save();
-        ctx.globalAlpha = clamp(actor.recoilKick, 0, 1);
-        const mg = ctx.createRadialGradient(mzx, mzy, 1, mzx, mzy, sh * 0.09);
-        mg.addColorStop(0, "#fff7d6"); mg.addColorStop(0.5, "#ffb020"); mg.addColorStop(1, "transparent");
-        ctx.fillStyle = mg;
-        ctx.beginPath(); ctx.arc(mzx, mzy, sh * 0.09, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
+      ctx.fillStyle = "#cdd6a0";
+      for (let i = 0; i < 3; i++) ctx.fillRect(headCX - headR * 0.32 + i * headR * 0.28, headCY + headR * 0.3, headR * 0.12, headR * 0.16);
+      if (near) {
+        ctx.strokeStyle = "rgba(180,220,120,0.5)";
+        ctx.lineWidth = Math.max(1, sh * 0.004);
+        ctx.beginPath();
+        ctx.moveTo(headCX, headCY + headR * 0.7);
+        ctx.lineTo(headCX + Math.sin(this.matchTime * 3) * headR * 0.1, headCY + headR * 1.3);
+        ctx.stroke();
       }
     } else {
-      // zombie: blood stains + gaping jaw for a grislier read
-      ctx.fillStyle = "rgba(120,20,20,0.5)";
+      // combat helmet, brim, visor band + chin strap, subtle face
+      ctx.fillStyle = shadeColor(cloth, 0.42);
       ctx.beginPath();
-      ctx.arc(cx - torsoW * 0.15, torsoTop + sh * 0.12, sw * 0.06, 0, Math.PI * 2);
-      ctx.arc(cx + torsoW * 0.1, torsoTop + sh * 0.24, sw * 0.05, 0, Math.PI * 2);
+      ctx.arc(headCX, headCY - headR * 0.18, headR * 1.16, Math.PI, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#3a1414";
-      ctx.fillRect(headCX - headR * 0.4, headCY + headR * 0.28, headR * 0.8, headR * 0.5);
+      ctx.fillStyle = shadeColor(cloth, 0.32);
+      rr(headCX - headR * 1.14, headCY - headR * 0.28, headR * 2.28, headR * 0.28, headR * 0.1);
+      ctx.fill();
+      // visor / eye band
+      ctx.fillStyle = "rgba(8,12,18,0.92)";
+      rr(headCX - headR * 0.92, headCY - headR * 0.1, headR * 1.84, headR * 0.4, headR * 0.12);
+      ctx.fill();
+      // faint NVG mount glow
+      ctx.fillStyle = "rgba(120,200,255,0.5)";
+      ctx.fillRect(headCX - headR * 0.12, headCY - headR * 0.05, headR * 0.24, headR * 0.12);
+      // chin strap
+      ctx.strokeStyle = "rgba(10,14,20,0.8)";
+      ctx.lineWidth = Math.max(1, sh * 0.006);
+      ctx.beginPath();
+      ctx.arc(headCX, headCY + headR * 0.2, headR * 0.9, 0.2, Math.PI - 0.2);
+      ctx.stroke();
+      // shoulder pads sit above the arms
+      ctx.fillStyle = shadeColor(cloth, 0.7);
+      rr(cx - torsoW / 2 - armW * 0.3, torsoTop - sh * 0.006, torsoW * 0.32, sh * 0.055, sw * 0.03); ctx.fill();
+      rr(cx + torsoW / 2 - torsoW * 0.32 + armW * 0.3, torsoTop - sh * 0.006, torsoW * 0.32, sh * 0.055, sw * 0.03); ctx.fill();
     }
 
-    // health bar (only when hurt)
+    // hit whiteout flash on top of everything
+    if (hurt) {
+      ctx.globalAlpha = clamp(actor.hurtFlash, 0, 0.7);
+      ctx.fillStyle = "#ffffff";
+      rr(cx - torsoW / 2, torsoTop, torsoW, torsoH, sw * 0.08);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // ---- health bar (only when damaged)
     const hp = clamp(actor.health / actor.maxHealth, 0, 1);
     if (hp < 0.999) {
       const bw = sw * 0.72;
       const bh = Math.max(2.5, sh * 0.022);
       const bx = cx - bw / 2;
-      const by = top - bh * 2.4;
+      const by = top - bh * 2.6;
       ctx.fillStyle = "rgba(0,0,0,0.6)";
-      ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+      rr(bx - 1, by - 1, bw + 2, bh + 2, 2); ctx.fill();
       ctx.fillStyle = hp > 0.5 ? "#4ade80" : hp > 0.25 ? "#facc15" : "#f87171";
-      ctx.fillRect(bx, by, bw * hp, bh);
+      rr(bx, by, bw * hp, bh, 1.5); ctx.fill();
+    }
+
+    // ---- name tag for nearby human soldiers
+    if (!zombie && near) {
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = actor.team === 0 ? "#bae6fd" : "#fecaca";
+      ctx.font = `${Math.round(sh * 0.05)}px ui-sans-serif, system-ui`;
+      ctx.textAlign = "center";
+      ctx.fillText(actor.name, cx, top - sh * 0.1);
+      ctx.globalAlpha = 1;
+      ctx.textAlign = "start";
     }
 
     ctx.restore();
