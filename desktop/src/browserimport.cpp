@@ -240,6 +240,40 @@ QVector<Profile> detectProfiles() {
 // ---------------------------------------------------------------------------
 // readers
 // ---------------------------------------------------------------------------
+// Fallback path: read a Chromium "Login Data" copy with the `sqlite3` CLI when
+// the Qt SQLite driver plugin isn't installed. This can't decrypt passwords
+// (they stay in the encrypted blob) but it recovers the site + username, which
+// is exactly what the live monitor needs to flag a *new* sign-in.
+static QVector<Credential> readChromiumViaCli(const QString& dbCopy, const Profile& p) {
+    QVector<Credential> out;
+    const QString sep = QStringLiteral("\x1f");
+    QProcess proc;
+    proc.start("sqlite3", QStringList{ "-batch", "-noheader", "-separator", sep, dbCopy,
+        "SELECT origin_url, username_value, signon_realm, blacklisted_by_user, coalesce(federation_url,'') FROM logins" });
+    if (!proc.waitForStarted(1500)) return out;                    // sqlite3 not installed
+    if (!proc.waitForFinished(6000)) { proc.kill(); return out; }
+    if (proc.exitStatus() != QProcess::NormalExit || proc.exitCode() != 0) return out;
+    const QString data = QString::fromUtf8(proc.readAllStandardOutput());
+    const QStringList lines = data.split('\n', Qt::SkipEmptyParts);
+    for (const QString& line : lines) {
+        const QStringList f = line.split(sep);
+        if (f.size() < 5) continue;
+        if (f[3].trimmed() == "1") continue;                       // blacklisted_by_user
+        Credential c;
+        c.browser = p.browser;
+        c.origin = f[0].isEmpty() ? f[2] : f[0];
+        c.site = prettyHost(c.origin.isEmpty() ? f[2] : c.origin);
+        c.username = f[1];
+        const QString fed = f[4];
+        c.method = methodFromFederation(fed);
+        if (c.method != Method::Password) c.provider = QUrl(fed.contains("://") ? fed : "https://" + fed).host();
+        if (c.username.isEmpty() && c.method == Method::Password) continue;
+        out.append(c);
+        if (out.size() > 4000) break;
+    }
+    return out;
+}
+
 static QVector<Credential> readChromium(const Profile& p, QString& note) {
     QVector<Credential> out;
     QTemporaryDir tmp;
@@ -262,7 +296,8 @@ static QVector<Credential> readChromium(const Profile& p, QString& note) {
     keys.append(deriveKey("peanuts"));
 
     int locked = 0;
-    {
+    const bool haveDriver = QSqlDatabase::isDriverAvailable("QSQLITE");
+    if (haveDriver) {
         const QString conn = "bimport_" + QString::number(reinterpret_cast<quintptr>(&p)) + "_" + p.name;
         QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", conn);
         db.setDatabaseName(copy);  // our private, writable copy — WAL replay is fine
@@ -306,6 +341,21 @@ static QVector<Credential> readChromium(const Profile& p, QString& note) {
         }
         QSqlDatabase::removeDatabase(conn);
     }
+
+    // Fallback: if the Qt SQLite driver is missing (or found nothing), try the
+    // sqlite3 CLI so detection still works on systems without libqt6sql6-sqlite.
+    if (out.isEmpty()) {
+        QVector<Credential> cli = readChromiumViaCli(copy, p);
+        if (!cli.isEmpty()) {
+            note = QString("%1 login(s) via sqlite3 (passwords not decrypted)").arg(cli.size());
+            return cli;
+        }
+        if (!haveDriver) {
+            note = "Qt SQLite driver missing — install 'libqt6sql6-sqlite' (or 'sqlite3') to read Chromium logins.";
+            return out;
+        }
+    }
+
     if (locked > 0)
         note = QString("%1 login(s) · %2 password(s) locked by the system keyring").arg(out.size()).arg(locked);
     else

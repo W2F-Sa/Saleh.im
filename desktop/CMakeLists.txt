@@ -83,9 +83,14 @@ set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "amd64")
 # Auto-resolve shared-library deps when dpkg-shlibdeps is available, plus a
 # sensible explicit floor.
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "libsodium23 | libsodium23t64, libqt6widgets6, libqt6gui6, libqt6core6, libqt6sql6, libssl3 | libssl3t64")
-# Optional: secret-tool (libsecret) lets us read browser keyring passwords.
-set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "libsecret-tools")
+# NOTE: libqt6sql6-sqlite is the SQLite *driver plugin*. It is loaded at
+# runtime (dlopen), so dpkg-shlibdeps can't detect it — it MUST be listed
+# explicitly. Without it QSqlDatabase("QSQLITE") fails and the live monitor /
+# browser import can read *nothing* from Chromium's "Login Data" databases.
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libsodium23 | libsodium23t64, libqt6widgets6, libqt6gui6, libqt6core6, libqt6sql6, libqt6sql6-sqlite, libssl3 | libssl3t64")
+# secret-tool (libsecret) reads browser keyring passwords; sqlite3 is a CLI
+# fallback used to read Chromium logins if the Qt SQLite plugin is absent.
+set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "libsecret-tools, sqlite3")
 # Cleanly supersede the old Electron-based package (same .desktop path).
 set(CPACK_DEBIAN_PACKAGE_CONFLICTS "saleh-vault-desktop")
 set(CPACK_DEBIAN_PACKAGE_REPLACES "saleh-vault-desktop")

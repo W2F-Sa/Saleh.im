@@ -17,6 +17,8 @@
 //  it matches whichever palette is active, and cleans itself up on destroy.
 // ============================================================================
 
+import type { Lang } from "@/lib/i18n";
+import { trBossKindName, trBossIntro } from "./fa";
 import { AbilityId, abilityById } from "./abilities";
 import { RiftAudio } from "./audio";
 import { ModifierDef, combineModifiers } from "./challenges";
@@ -339,6 +341,13 @@ export class RiftGame {
   setSfxVolume(v: number) { this.audio.setSfx(v); }
   setMusicVolume(v: number) { this.audio.setMusicVolume(v); }
 
+  // -- localisation ---------------------------------------------------------
+  // Drives the language of on-canvas banner text (SECTOR / WAVE / boss intros
+  // / PHASE / SECTOR CLEARED). Menu/HUD chrome is translated in React; this
+  // keeps the in-canvas text in sync when the site language toggles.
+  private lang: Lang = "en";
+  setLang(l: Lang) { this.lang = l; }
+
   // -- accessibility --------------------------------------------------------
   // When enabled, every enemy/boss/bullet gets a crisp white outline on top
   // of its usual colour+shape so distinguishing threats never depends on
@@ -535,12 +544,14 @@ export class RiftGame {
       this.sector++;
       if (this.sector > SECTORS) {
         if (!this.prestige) { this.finishRun(true); return; }
-        this.setBanner(`ENDLESS — SECTOR ${this.sector}`, 2.6);
+        this.setBanner(this.lang === "fa" ? `بی‌پایان — بخشِ ${this.sector}` : `ENDLESS — SECTOR ${this.sector}`, 2.6);
       } else {
-        this.setBanner(`SECTOR ${this.sector}`);
+        this.setBanner(this.lang === "fa" ? `بخشِ ${this.sector}` : `SECTOR ${this.sector}`);
       }
     } else {
-      this.setBanner(this.wave === WAVES_PER_SECTOR ? "⚠ BOSS INCOMING" : `WAVE ${this.wave}`);
+      this.setBanner(this.lang === "fa"
+        ? (this.wave === WAVES_PER_SECTOR ? "⚠ باس در راه است" : `موجِ ${this.wave}`)
+        : (this.wave === WAVES_PER_SECTOR ? "⚠ BOSS INCOMING" : `WAVE ${this.wave}`));
     }
     const s = this.sector, w = this.wave;
     const power = (s - 1) * WAVES_PER_SECTOR + w;
@@ -617,7 +628,7 @@ export class RiftGame {
       r: def.radius, speed: def.baseSpeed, dmg: def.baseDmg * this.difficulty.enemyDmgMult,
       ang: Math.PI / 2, phase: 1, elapsed: 0, intentCd: 1.2, shieldLeft: 0, dashCd: 0, dashTx: this.w / 2, dashTy: this.h / 2, hitFlash: 0,
     };
-    this.setBanner(def.intro, 3.2);
+    this.setBanner(trBossIntro(this.lang, def.kind, def.intro), 3.2);
     this.audio.play("bossIntro");
   }
 
@@ -1163,7 +1174,9 @@ export class RiftGame {
     const targetPhase = frac > 0.66 ? 1 : frac > 0.33 ? 2 : 3;
     if (targetPhase > boss.phase && targetPhase <= boss.def.phases) {
       boss.phase = targetPhase;
-      this.setBanner(`${boss.def.name} — PHASE ${boss.phase}`, 1.8);
+      this.setBanner(this.lang === "fa"
+        ? `${trBossKindName(this.lang, boss.def.kind, boss.def.name)} — فازِ ${boss.phase}`
+        : `${boss.def.name} — PHASE ${boss.phase}`, 1.8);
     }
 
     // movement: drift toward the Core unless mid-dash
@@ -1345,7 +1358,7 @@ export class RiftGame {
     this.addXp(150);
     this.spawnParticles(boss.x, boss.y, 70, boss.def.color, "spark", 280);
     this.shake = 24;
-    this.setBanner("SECTOR CLEARED", 2.4);
+    this.setBanner(this.lang === "fa" ? "بخش پاک شد" : "SECTOR CLEARED", 2.4);
     this.audio.play("kill", 0.5);
     const drops = 16;
     for (let i = 0; i < drops; i++) this.pickups.push({ x: boss.x + rand(-boss.r, boss.r), y: boss.y + rand(-boss.r, boss.r), vx: rand(-60, 60), vy: rand(-60, 60), value: Math.max(1, Math.round((220 + this.sector * 60) / drops)), life: 14, kind: "gold" });

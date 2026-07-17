@@ -12,11 +12,17 @@ import {
 } from "@/lib/rift/meta";
 import { HEROES, HeroDef, heroById, isHeroUnlocked } from "@/lib/rift/heroes";
 import { WEAPONS, WeaponKind, isWeaponUnlocked, weaponById } from "@/lib/rift/weapons";
-import { BOSS_LORE, ENEMY_CODEX, randomTip, synergyFor } from "@/lib/rift/codex";
+import { BOSS_LORE, ENEMY_CODEX, FIELD_TIPS, synergyFor } from "@/lib/rift/codex";
 import { BOSSES } from "@/lib/rift/enemies";
 import { ModifierDef, dailyChallengeLabel, dailyChallengeModifiers } from "@/lib/rift/challenges";
 import { useLang } from "@/components/lang-provider";
 import { riftDict } from "@/lib/rift/i18n";
+import type { Lang } from "@/lib/i18n";
+import {
+  trHero, trWeapon, trWeaponName, trAbility, trAbilityName, trUpgrade,
+  trEnemyName, trCodex, trBoss, trBossLore, trAchievement, trDifficulty,
+  trModifier, trSynergyReasoning, trHudBossName, trHudBossTitle, FIELD_TIPS_FA,
+} from "@/lib/rift/fa";
 
 const INITIAL_HUD: Hud = {
   state: "menu", wave: 0, sector: 1, gold: 0, score: 0, hp: 100, hpMax: 100, shield: 0,
@@ -42,7 +48,8 @@ function Bar({ value, max, color, label }: { value: number; max: number; color: 
   );
 }
 
-function HeroCard({ hero, selected, unlocked, onSelect }: { hero: HeroDef; selected: boolean; unlocked: boolean; onSelect: () => void }) {
+function HeroCard({ hero, selected, unlocked, onSelect, lang, unlocksAt }: { hero: HeroDef; selected: boolean; unlocked: boolean; onSelect: () => void; lang: Lang; unlocksAt: (s: string) => string }) {
+  const t = trHero(lang, hero);
   return (
     <button
       onClick={onSelect}
@@ -53,16 +60,17 @@ function HeroCard({ hero, selected, unlocked, onSelect }: { hero: HeroDef; selec
       <div className="flex items-center gap-2.5">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-lg" style={{ background: `color-mix(in srgb, ${hero.color} 20%, transparent)`, color: hero.color }}>{hero.icon}</span>
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-sm font-semibold">{hero.name}{!unlocked && <span className="text-xs">🔒</span>}</div>
-          <div className="text-[11px] text-[var(--fg-2)]">{hero.title}</div>
+          <div className="flex items-center gap-1.5 text-sm font-semibold">{t.name}{!unlocked && <span className="text-xs">🔒</span>}</div>
+          <div className="text-[11px] text-[var(--fg-2)]">{t.title}</div>
         </div>
       </div>
-      <p className="mt-2 text-[11px] leading-relaxed text-[var(--fg-2)]">{unlocked ? hero.passiveDesc : `Unlocks at ${hero.unlockScore.toLocaleString()} lifetime score`}</p>
+      <p className="mt-2 text-[11px] leading-relaxed text-[var(--fg-2)]">{unlocked ? t.passiveDesc : unlocksAt(hero.unlockScore.toLocaleString())}</p>
     </button>
   );
 }
 
-function WeaponCard({ weapon, selected, unlocked, onSelect }: { weapon: ReturnType<typeof weaponById>; selected: boolean; unlocked: boolean; onSelect: () => void }) {
+function WeaponCard({ weapon, selected, unlocked, onSelect, lang, unlocksAt }: { weapon: ReturnType<typeof weaponById>; selected: boolean; unlocked: boolean; onSelect: () => void; lang: Lang; unlocksAt: (s: string) => string }) {
+  const t = trWeapon(lang, weapon);
   return (
     <button
       onClick={onSelect}
@@ -72,9 +80,9 @@ function WeaponCard({ weapon, selected, unlocked, onSelect }: { weapon: ReturnTy
     >
       <div className="flex items-center gap-2.5">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-lg" style={{ background: `color-mix(in srgb, ${weapon.color} 20%, transparent)`, color: weapon.color }}>{weapon.icon}</span>
-        <div className="min-w-0 text-sm font-semibold">{weapon.name}{!unlocked && <span className="ms-1.5 text-xs">🔒</span>}</div>
+        <div className="min-w-0 text-sm font-semibold">{t.name}{!unlocked && <span className="ms-1.5 text-xs">🔒</span>}</div>
       </div>
-      <p className="mt-2 text-[11px] leading-relaxed text-[var(--fg-2)]">{unlocked ? weapon.special : `Unlocks at ${weapon.unlockScore.toLocaleString()} lifetime score`}</p>
+      <p className="mt-2 text-[11px] leading-relaxed text-[var(--fg-2)]">{unlocked ? t.special : unlocksAt(weapon.unlockScore.toLocaleString())}</p>
     </button>
   );
 }
@@ -130,7 +138,8 @@ export default function RiftPage() {
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [toast, setToast] = useState("");
   const [newlyUnlocked, setNewlyUnlocked] = useState<string[]>([]);
-  const [fieldTip] = useState(() => randomTip());
+  const [tipIndex] = useState(() => Math.floor(Math.random() * FIELD_TIPS.length));
+  const fieldTip = (lang === "fa" ? FIELD_TIPS_FA : FIELD_TIPS)[tipIndex] ?? FIELD_TIPS[tipIndex];
   const [presetNameInput, setPresetNameInput] = useState("");
   const [dailyModifiers] = useState<ModifierDef[]>(() => dailyChallengeModifiers());
   const [challengeMode, setChallengeMode] = useState(false);
@@ -186,6 +195,7 @@ export default function RiftPage() {
     g.setSfxVolume(profile.sfxVolume);
     g.setMusicVolume(profile.musicVolume);
     g.setColorblindMode(profile.colorblindShapes);
+    g.setLang(lang);
     gameRef.current = g;
     const ro = new ResizeObserver(() => g.resize());
     ro.observe(canvas);
@@ -197,6 +207,9 @@ export default function RiftPage() {
 
   const g = () => gameRef.current;
   const playing = gs === "playing" || gs === "paused" || gs === "shop";
+
+  // Keep the engine's on-canvas banner language in sync with the site toggle.
+  useEffect(() => { gameRef.current?.setLang(lang); }, [lang]);
 
   useEffect(() => {
     if (gs === "shop") setShopOfferIds(g()?.shopOffer() ?? []);
@@ -302,7 +315,7 @@ export default function RiftPage() {
             {hud.boss.visible ? (
               <div className="w-full max-w-md">
                 <div className="mb-1 flex items-center justify-between text-[10px] tracking-widest" style={{ color: hud.boss.color }}>
-                  <span>{hud.boss.name} — {hud.boss.title}{hud.boss.shieldActive ? ` · ${T.shielded}` : ""}</span>
+                  <span>{trHudBossName(lang, hud.boss.name)} — {trHudBossTitle(lang, hud.boss.title)}{hud.boss.shieldActive ? ` · ${T.shielded}` : ""}</span>
                   <span>{T.phase} {hud.boss.phase}/{hud.boss.phases}</span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full" style={{ background: "var(--bg-3)" }}>
@@ -401,14 +414,17 @@ export default function RiftPage() {
                   <div>
                     <div className="mb-2 label">{T.difficulty}</div>
                     <div className="grid grid-cols-3 gap-2">
-                      {DIFFICULTIES.map((d) => (
+                      {DIFFICULTIES.map((d) => {
+                        const dt = trDifficulty(lang, d);
+                        return (
                         <button key={d.id} onClick={() => setProfile((p) => ({ ...p, selectedDifficulty: d.id as DifficultyId }))}
                           className="rounded-xl border p-3 text-left transition-all"
                           style={{ borderColor: profile.selectedDifficulty === d.id ? d.color : "var(--line)", background: profile.selectedDifficulty === d.id ? `color-mix(in srgb, ${d.color} 10%, var(--bg-3))` : "var(--bg-3)" }}>
-                          <div className="text-sm font-semibold" style={{ color: d.color }}>{d.name}</div>
-                          <div className="mt-0.5 text-[11px] text-[var(--fg-2)]">{d.desc}</div>
+                          <div className="text-sm font-semibold" style={{ color: d.color }}>{dt.name}</div>
+                          <div className="mt-0.5 text-[11px] text-[var(--fg-2)]">{dt.desc}</div>
                         </button>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                   <div>
@@ -422,7 +438,7 @@ export default function RiftPage() {
                             style={{ borderColor: picked ? a.color : "var(--line)", background: picked ? `color-mix(in srgb, ${a.color} 12%, var(--bg-3))` : "var(--bg-3)" }}>
                             <span className="text-lg">{a.icon}</span>
                             <span className="min-w-0">
-                              <span className="block text-xs font-semibold">{a.name}{bannedByOneLife && " 🚫"}</span>
+                              <span className="block text-xs font-semibold">{trAbility(lang, a).name}{bannedByOneLife && " 🚫"}</span>
                               <span className="block text-[10px] text-[var(--fg-2)]">{bannedByOneLife ? T.bannedByOneLife : `${a.cooldown}${T.cooldownSuffix}`}</span>
                             </span>
                           </button>
@@ -431,7 +447,7 @@ export default function RiftPage() {
                     </div>
                   </div>
                   <div className="rounded-xl border p-3 text-xs text-[var(--fg-2)]" style={{ borderColor: "var(--line)" }}>
-                    {T.flyingAs(selectedHero.name, selectedWeapon.name)}
+                    {T.flyingAs(trHero(lang, selectedHero).name, trWeaponName(lang, selectedWeapon))}
                   </div>
                   <div>
                     <div className="mb-2 label">{T.loadoutPresets}</div>
@@ -471,13 +487,16 @@ export default function RiftPage() {
                       </label>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                      {dailyModifiers.map((m) => (
+                      {dailyModifiers.map((m) => {
+                        const mt = trModifier(lang, m);
+                        return (
                         <div key={m.id} className="rounded-xl border p-2.5 text-center transition-all" style={{ borderColor: challengeMode ? "var(--accent)" : "var(--line)", background: challengeMode ? "color-mix(in srgb, var(--accent) 8%, var(--bg-3))" : "var(--bg-3)", opacity: challengeMode ? 1 : 0.6 }}>
                           <div className="text-lg">{m.icon}</div>
-                          <div className="mt-0.5 text-[11px] font-semibold">{m.name}</div>
-                          <div className="mt-0.5 text-[9px] leading-tight text-[var(--fg-2)]">{m.desc}</div>
+                          <div className="mt-0.5 text-[11px] font-semibold">{mt.name}</div>
+                          <div className="mt-0.5 text-[9px] leading-tight text-[var(--fg-2)]">{mt.desc}</div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                     {challengeMode && <p className="mt-2 text-[11px] text-[var(--accent)]">{T.challengeNote}</p>}
                   </div>
@@ -555,7 +574,7 @@ export default function RiftPage() {
                 <div className="mt-6 space-y-3">
                   <div className="grid gap-2.5 sm:grid-cols-2">
                     {HEROES.map((h) => (
-                      <HeroCard key={h.id} hero={h} selected={profile.selectedHero === h.id} unlocked={isHeroUnlocked(h, lifetimeScore)}
+                      <HeroCard key={h.id} hero={h} lang={lang} unlocksAt={T.unlocksAt} selected={profile.selectedHero === h.id} unlocked={isHeroUnlocked(h, lifetimeScore)}
                         onSelect={() => isHeroUnlocked(h, lifetimeScore) && setProfile((p) => ({ ...p, selectedHero: h.id }))} />
                     ))}
                   </div>
@@ -565,16 +584,16 @@ export default function RiftPage() {
                     const bestWeapon = weaponById(synergy.bestWeapon as WeaponKind);
                     return (
                       <div className="rounded-xl border p-3.5" style={{ borderColor: "var(--line)", background: "color-mix(in srgb, var(--accent) 6%, var(--bg-3))" }}>
-                        <div className="label mb-1.5">{T.suggestedBuild(selectedHero.name)}</div>
+                        <div className="label mb-1.5">{T.suggestedBuild(trHero(lang, selectedHero).name)}</div>
                         <div className="flex items-center gap-2 text-xs">
-                          <span style={{ color: bestWeapon.color }}>{bestWeapon.icon} {bestWeapon.name}</span>
+                          <span style={{ color: bestWeapon.color }}>{bestWeapon.icon} {trWeaponName(lang, bestWeapon)}</span>
                           <span className="text-[var(--fg-2)]">+</span>
                           {synergy.bestAbilities.map((id) => {
                             const a = ABILITIES.find((x) => x.id === id);
-                            return a ? <span key={id} style={{ color: a.color }}>{a.icon} {a.name}</span> : null;
+                            return a ? <span key={id} style={{ color: a.color }}>{a.icon} {trAbility(lang, a).name}</span> : null;
                           })}
                         </div>
-                        <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--fg-2)]">{synergy.reasoning}</p>
+                        <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--fg-2)]">{trSynergyReasoning(lang, selectedHero.id, synergy.reasoning)}</p>
                         {isWeaponUnlocked(bestWeapon, lifetimeScore) ? (
                           <button
                             onClick={() => setProfile((p) => ({ ...p, selectedWeapon: synergy.bestWeapon, selectedAbilities: synergy.bestAbilities as [string, string] }))}
@@ -583,7 +602,7 @@ export default function RiftPage() {
                             {T.applyBuild}
                           </button>
                         ) : (
-                          <p className="mt-2 text-[11px] text-[var(--fg-2)]">{T.unlockToUse(bestWeapon.name)}</p>
+                          <p className="mt-2 text-[11px] text-[var(--fg-2)]">{T.unlockToUse(trWeaponName(lang, bestWeapon))}</p>
                         )}
                       </div>
                     );
@@ -594,7 +613,7 @@ export default function RiftPage() {
               {menuTab === "weapons" && (
                 <div className="mt-6 grid gap-2.5 sm:grid-cols-2">
                   {WEAPONS.map((w) => (
-                    <WeaponCard key={w.id} weapon={w} selected={profile.selectedWeapon === w.id} unlocked={isWeaponUnlocked(w, lifetimeScore)}
+                    <WeaponCard key={w.id} weapon={w} lang={lang} unlocksAt={T.unlocksAt} selected={profile.selectedWeapon === w.id} unlocked={isWeaponUnlocked(w, lifetimeScore)}
                       onSelect={() => isWeaponUnlocked(w, lifetimeScore) && setProfile((p) => ({ ...p, selectedWeapon: w.id }))} />
                   ))}
                 </div>
@@ -605,16 +624,19 @@ export default function RiftPage() {
                   <div>
                     <div className="mb-2 label">{T.bestiary}</div>
                     <div className="grid gap-2 sm:grid-cols-2">
-                      {ENEMY_CODEX.map((c) => (
+                      {ENEMY_CODEX.map((c) => {
+                        const ct = trCodex(lang, c);
+                        return (
                         <div key={c.kind} className="rounded-xl border p-3" style={{ borderColor: "var(--line)", background: "var(--bg-3)" }}>
                           <div className="flex items-center justify-between">
-                            <b className="text-xs capitalize">{c.kind}</b>
+                            <b className="text-xs capitalize">{trEnemyName(lang, c.kind, c.kind)}</b>
                             <span className="mono text-[10px] text-[var(--fg-2)]">{"⚠".repeat(c.threat)}</span>
                           </div>
-                          <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--fg-2)]">{c.flavor}</p>
-                          <p className="mt-1.5 text-[11px] leading-relaxed" style={{ color: "var(--accent)" }}>{c.tacticalNote}</p>
+                          <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--fg-2)]">{ct.flavor}</p>
+                          <p className="mt-1.5 text-[11px] leading-relaxed" style={{ color: "var(--accent)" }}>{ct.tacticalNote}</p>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                   <div>
@@ -622,14 +644,16 @@ export default function RiftPage() {
                     <div className="grid gap-2">
                       {BOSSES.map((b) => {
                         const lore = BOSS_LORE.find((l) => l.kind === b.kind);
+                        const bt = trBoss(lang, b);
+                        const lt = lore ? trBossLore(lang, lore) : null;
                         return (
                           <div key={b.kind} className="rounded-xl border p-3" style={{ borderColor: "var(--line)", background: "var(--bg-3)" }}>
                             <div className="flex items-center gap-2">
                               <span className="h-2 w-2 rounded-full" style={{ background: b.color, boxShadow: `0 0 8px ${b.color}` }} />
-                              <b className="text-sm">{b.name}</b><span className="text-[11px] text-[var(--fg-2)]">— {b.title}</span>
+                              <b className="text-sm">{bt.name}</b><span className="text-[11px] text-[var(--fg-2)]">— {bt.title}</span>
                             </div>
-                            {lore && <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--fg-2)]">{lore.lore}</p>}
-                            {lore && <p className="mt-1.5 text-[11px] leading-relaxed" style={{ color: "var(--accent)" }}>{lore.strategy}</p>}
+                            {lt && <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--fg-2)]">{lt.lore}</p>}
+                            {lt && <p className="mt-1.5 text-[11px] leading-relaxed" style={{ color: "var(--accent)" }}>{lt.strategy}</p>}
                           </div>
                         );
                       })}
@@ -642,12 +666,13 @@ export default function RiftPage() {
                 <div className="mt-6 grid max-h-[22rem] gap-2 overflow-y-auto pe-1 sm:grid-cols-2">
                   {ACHIEVEMENTS.map((a) => {
                     const unlocked = profile.unlockedAchievements.includes(a.id);
+                    const at = trAchievement(lang, a);
                     return (
                       <div key={a.id} className="flex items-center gap-2.5 rounded-xl border p-2.5" style={{ borderColor: "var(--line)", background: unlocked ? "color-mix(in srgb, var(--accent) 8%, var(--bg-3))" : "var(--bg-3)", opacity: unlocked ? 1 : 0.55 }}>
                         <span className="text-lg">{unlocked ? a.icon : "🔒"}</span>
                         <span className="min-w-0">
-                          <span className="block text-xs font-semibold">{a.name}</span>
-                          <span className="block text-[10px] text-[var(--fg-2)]">{a.desc}</span>
+                          <span className="block text-xs font-semibold">{at.name}</span>
+                          <span className="block text-[10px] text-[var(--fg-2)]">{at.desc}</span>
                         </span>
                       </div>
                     );
@@ -667,7 +692,7 @@ export default function RiftPage() {
                     <StatCard label={T.bossKills} value={profile.lifetimeBossKills} />
                     <StatCard label={T.lifetimeGold} value={profile.lifetimeGold.toLocaleString()} />
                     <StatCard label={T.critKills} value={profile.lifetimeCrits} />
-                    <StatCard label={T.favoriteHero} value={favoriteHero(profile.runLog) ? heroById(favoriteHero(profile.runLog)!).name : "—"} />
+                    <StatCard label={T.favoriteHero} value={favoriteHero(profile.runLog) ? trHero(lang, heroById(favoriteHero(profile.runLog)!)).name : "—"} />
                   </div>
                   <div>
                     <div className="mb-2 label">{T.recentRuns}</div>
@@ -732,7 +757,7 @@ export default function RiftPage() {
                     <div className="label mb-1">{T.bestByDifficulty}</div>
                     {DIFFICULTIES.map((d) => (
                       <div key={d.id} className="flex items-center justify-between">
-                        <span style={{ color: d.color }}>{d.name}</span>
+                        <span style={{ color: d.color }}>{trDifficulty(lang, d).name}</span>
                         <span className="mono text-[var(--fg)]">{(profile.bestScoreByDifficulty[d.id] ?? 0).toLocaleString()}</span>
                       </div>
                     ))}
@@ -802,7 +827,7 @@ export default function RiftPage() {
                         className="grid place-items-center gap-1 rounded-xl border p-2 text-center transition-all"
                         style={{ borderColor: active ? w.color : "var(--line)", background: active ? `color-mix(in srgb, ${w.color} 14%, var(--bg-3))` : "var(--bg-3)" }}>
                         <span className="text-lg" style={{ color: w.color }}>{w.icon}</span>
-                        <span className="text-[10px]">{w.name}</span>
+                        <span className="text-[10px]">{trWeaponName(lang, w)}</span>
                       </button>
                     );
                   })}
@@ -817,6 +842,7 @@ export default function RiftPage() {
               {shopOfferIds.map((id) => {
                 const u = UPGRADES.find((x) => x.id === id);
                 if (!u) return null;
+                const ut = trUpgrade(lang, u);
                 const gg = g();
                 const lvl = gg?.levelOf(u.id) ?? 0;
                 const maxed = gg?.maxedOf(u.id) ?? false;
@@ -829,8 +855,8 @@ export default function RiftPage() {
                     style={{ borderColor: afford ? "color-mix(in srgb,var(--accent) 30%,var(--line))" : "var(--line)", background: "var(--bg-3)" }}>
                     <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-xl" style={{ background: `color-mix(in srgb,${tierCol} 16%,transparent)`, color: tierCol }}>{u.icon}</span>
                     <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2"><b className="text-sm">{u.name}</b>{lvl > 0 && <span className="mono text-[10px] text-[var(--fg-2)]">Lv {lvl}/{u.max}</span>}</span>
-                      <span className="block text-xs text-[var(--fg-2)]">{u.desc}</span>
+                      <span className="flex items-center gap-2"><b className="text-sm">{ut.name}</b>{lvl > 0 && <span className="mono text-[10px] text-[var(--fg-2)]">Lv {lvl}/{u.max}</span>}</span>
+                      <span className="block text-xs text-[var(--fg-2)]">{ut.desc}</span>
                     </span>
                     <span className="mono shrink-0 text-sm font-bold" style={{ color: maxed ? "var(--fg-2)" : afford ? "var(--accent)" : "var(--fg-2)" }}>{maxed ? T.max : `◆${cost}`}</span>
                   </button>
@@ -841,6 +867,7 @@ export default function RiftPage() {
               <summary className="cursor-pointer text-xs text-[var(--fg-2)] hover:text-[var(--fg)]">{T.showAll}</summary>
               <div className="mt-2.5 grid gap-2.5 sm:grid-cols-2">
                 {UPGRADES.map((u) => {
+                  const ut = trUpgrade(lang, u);
                   const gg = g();
                   const lvl = gg?.levelOf(u.id) ?? 0;
                   const maxed = gg?.maxedOf(u.id) ?? false;
@@ -888,7 +915,7 @@ export default function RiftPage() {
                 {newlyUnlocked.map((id) => {
                   const a = ACHIEVEMENTS.find((x) => x.id === id);
                   if (!a) return null;
-                  return <div key={id} className="flex items-center gap-2 text-sm"><span>{a.icon}</span><span>{a.name}</span></div>;
+                  return <div key={id} className="flex items-center gap-2 text-sm"><span>{a.icon}</span><span>{trAchievement(lang, a).name}</span></div>;
                 })}
               </div>
             )}

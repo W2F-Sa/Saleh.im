@@ -222,9 +222,11 @@
    ========================================================================= */
 
 html[dir="rtl"] {
-  --font-sans: "Shabnam", var(--font-fa-ui), sans-serif;
-  --font-display: "Shabnam", var(--font-fa-ui), sans-serif;
-  --font-mono: var(--font-fa-ui), "Shabnam", sans-serif;
+  /* Vazirmatn (self-hosted via next/font, never blocked) is the reliable
+     primary Persian face; Shabnam/Samim from the CDN are optional niceties. */
+  --font-sans: var(--font-fa-ui), "Vazirmatn", "Shabnam", sans-serif;
+  --font-display: var(--font-fa-ui), "Vazirmatn", "Shabnam", sans-serif;
+  --font-mono: var(--font-fa-ui), "Vazirmatn", "Shabnam", monospace;
 }
 
 /* Persian headings: Shabnam, semi-bold, comfortable line-height */
@@ -252,7 +254,7 @@ html[dir="rtl"] .fa-accent {
   letter-spacing: -0.01em;
 }
 html[dir="rtl"] .fa-quote {
-  font-family: "Samim", var(--font-fa-ui), serif;
+  font-family: var(--font-fa-ui), "Samim", serif;
 }
 
 /* Keep code/terminal LTR regardless of page direction */
