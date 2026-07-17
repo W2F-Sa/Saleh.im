@@ -4,6 +4,8 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
+#include <QProcess>
+#include <QSqlDatabase>
 #include <QTimer>
 
 namespace bimport {
@@ -69,6 +71,48 @@ void LiveMonitor::stop() {
 void LiveMonitor::rescanNow() {
     if (!running_) return;
     refreshWatchList();
+}
+
+QString LiveMonitor::diagnostics() const {
+    QStringList out;
+    const bool drv = QSqlDatabase::isDriverAvailable("QSQLITE");
+    out << QString("• Qt SQLite driver (QSQLITE): %1")
+               .arg(drv ? "available ✓"
+                        : "MISSING ✗  →  install the package  libqt6sql6-sqlite  (this is the #1 cause of "
+                          "\"nothing is detected\": without it Vault cannot open Chromium's Login Data at all)");
+
+    auto probe = [](const QString& exe, const QStringList& args) -> bool {
+        QProcess p;
+        p.start(exe, args);
+        if (!p.waitForStarted(1200)) return false;
+        p.waitForFinished(1500);
+        return true;
+    };
+    out << QString("• sqlite3 CLI fallback: %1").arg(probe("sqlite3", {"-version"}) ? "available ✓" : "not found (optional — install 'sqlite3')");
+    out << QString("• secret-tool (keyring): %1").arg(probe("secret-tool", {"--version"}) ? "available ✓" : "not found — saved passwords will stay locked (site + username are still detected)");
+
+    const QVector<Profile> profiles = detectProfiles();
+    out << "";
+    out << QString("Detected %1 browser profile(s):").arg(profiles.size());
+    if (profiles.isEmpty()) {
+        out << "  (none) — no supported browser with saved logins was found. Have you saved at least one";
+        out << "  password in Chrome/Chromium/Brave/Edge/Vivaldi/Opera/Firefox? Flatpak & Snap installs are checked too.";
+    }
+    for (const Profile& p : profiles) {
+        QString note;
+        const QVector<Credential> creds = readProfile(p, note);
+        out << QString("  • %1 / %2 — %3 credential(s)%4")
+                   .arg(p.browser, p.name)
+                   .arg(creds.size())
+                   .arg(note.isEmpty() ? QString() : QString("  ·  %1").arg(note));
+    }
+
+    out << "";
+    out << QString("Monitor: %1  ·  watching %2 file(s)  ·  session feed: %3 entr(y/ies)")
+               .arg(running_ ? "RUNNING" : "stopped")
+               .arg(watcher_ ? watcher_->files().size() : 0)
+               .arg(feed_.size());
+    return out.join("\n");
 }
 
 int LiveMonitor::unreviewedCount() const {

@@ -41,6 +41,9 @@ type Msg = {
   progress?: number;
   edited?: boolean;
   deleted?: boolean;
+  pinned?: boolean;
+  starred?: boolean;
+  fwd?: boolean; // forwarded from another chat
 };
 type Convo = { peer: string; handle: string; name: string; messages: Msg[]; unread: number; typing: boolean };
 type ConnState = { conn: any; keyPair?: CryptoKeyPair; keys?: SessionKeys; ready: boolean; handle: string };
@@ -201,6 +204,17 @@ export default function MessengerPage() {
   const [recording, setRecording] = useState(false);
   const [recSecs, setRecSecs] = useState(0);
   const [attaching, setAttaching] = useState(false);
+  // --- new features ---
+  const [globalQuery, setGlobalQuery] = useState("");           // search across all conversations
+  const [aliases, setAliases] = useState<Record<string, string>>({}); // local contact nicknames (by handle)
+  const [mutedPeers, setMutedPeers] = useState<Record<string, boolean>>({});
+  const [disappear, setDisappear] = useState<Record<string, number>>({}); // peer -> seconds (0 = off)
+  const [forwarding, setForwarding] = useState<Msg | null>(null); // message being forwarded
+  const [showSaved, setShowSaved] = useState(false);             // saved (starred) messages panel
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showConvoMenu, setShowConvoMenu] = useState(false);
+  const [privacy, setPrivacy] = useState({ readReceipts: true, typingIndicator: true, fontScale: 1 });
+  const draftsRef = useRef<Record<string, string>>({});
 
   const peerRef = useRef<any>(null);
   const connsRef = useRef<Record<string, ConnState>>({});
@@ -214,6 +228,7 @@ export default function MessengerPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const notifyRef = useRef(false);
+  const mutedRef = useRef<Record<string, boolean>>({});
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -231,17 +246,20 @@ export default function MessengerPage() {
   useEffect(() => { activeRef.current = active; }, [active]);
   useEffect(() => { soundRef.current = soundOn; }, [soundOn]);
   useEffect(() => { notifyRef.current = notify; }, [notify]);
+  useEffect(() => { mutedRef.current = mutedPeers; }, [mutedPeers]);
+  const privacyRef = useRef(privacy);
+  useEffect(() => { privacyRef.current = privacy; }, [privacy]);
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
 
   // Reflect the total unread count in the browser tab title so a background
   // conversation is noticeable without the tab focused.
   useEffect(() => {
     if (typeof document === "undefined") return;
-    const total = Object.values(convos).reduce((n, c) => n + c.unread, 0);
+    const total = Object.values(convos).reduce((n, c) => n + (mutedPeers[c.peer] ? 0 : c.unread), 0);
     const base = "Cipher — encrypted messenger";
     document.title = total > 0 ? `(${total}) ${base}` : base;
     return () => { document.title = base; };
-  }, [convos]);
+  }, [convos, mutedPeers]);
 
   // Tidy up all timers + the peer connection when the page unmounts.
   useEffect(() => {
@@ -295,6 +313,7 @@ export default function MessengerPage() {
         edit: "ویرایش", copyText: "کپیِ متن", save: "ذخیره", edited: "ویرایش‌شده", emoji: "ایموجی",
         editing: "در حالِ ویرایش", dropHere: "فایل را برای ارسال اینجا رها کن", notif: "اعلانِ دسکتاپ", jump: "پرش به پیام",
         deleteEveryone: "حذف برای همه", msgDeleted: "این پیام حذف شد", reconnecting: "در حالِ اتصالِ دوباره…", queued: "در صف — با اتصال ارسال می‌شود", sentWhenOnline: "وقتی طرف آنلاین شود ارسال می‌شود",
+        pin: "سنجاق", unpin: "برداشتنِ سنجاق", pinned: "پیام‌های سنجاق‌شده", star: "ذخیره", saved: "ذخیره‌شده‌ها", noSaved: "پیامِ ذخیره‌شده‌ای نیست.", forward: "هدایت", forwardTo: "هدایت به…", forwarded: "هدایت‌شده", searchAll: "جستجو در همهٔ گفتگوها…", rename: "تغییرِ نام", renamePh: "نامِ نمایشی", muteChat: "بی‌صدا", unmuteChat: "باصدا", mutedTag: "بی‌صدا", disappearing: "پیام‌های ناپدیدشونده", off: "خاموش", exportChat: "خروجیِ گفتگو", privacy: "حریمِ خصوصی", readReceipts: "رسیدِ خواندن", typingInd: "نشانگرِ تایپ", textSize: "اندازهٔ متن", menu: "بیشتر", noResults: "چیزی یافت نشد", secs: "ثانیه", mins: "دقیقه",
       }
     : {
         title: "Cipher", tag: "End-to-end encrypted peer-to-peer messenger",
@@ -317,11 +336,25 @@ export default function MessengerPage() {
         edit: "Edit", copyText: "Copy text", save: "Save", edited: "edited", emoji: "Emoji",
         editing: "Editing", dropHere: "Drop file to send", notif: "Desktop notifications", jump: "Jump to message",
         deleteEveryone: "Delete for everyone", msgDeleted: "This message was deleted", reconnecting: "reconnecting…", queued: "Queued — will send when connected", sentWhenOnline: "Will send once they're online",
+        pin: "Pin", unpin: "Unpin", pinned: "Pinned messages", star: "Save", saved: "Saved messages", noSaved: "No saved messages.", forward: "Forward", forwardTo: "Forward to…", forwarded: "Forwarded", searchAll: "Search all chats…", rename: "Rename contact", renamePh: "Display name", muteChat: "Mute", unmuteChat: "Unmute", mutedTag: "Muted", disappearing: "Disappearing messages", off: "Off", exportChat: "Export chat", privacy: "Privacy", readReceipts: "Read receipts", typingInd: "Typing indicator", textSize: "Text size", menu: "More", noResults: "No matches", secs: "sec", mins: "min",
       };
 
-  const nameOf = (c: Convo) => c.handle.split("#")[0];
+  const displayName = (handle: string) => aliases[handle] || handle.split("#")[0];
+  const nameOf = (c: Convo) => displayName(c.handle);
   const storeKey = (peer: string) => `cipher:hist:${meRef.current.handle}:${peer}`;
   const verifKey = () => `cipher:verified:${meRef.current.handle}`;
+  const prefsKey = () => `cipher:prefs:${meRef.current.handle}`;
+  const draftsKey = () => `cipher:drafts:${meRef.current.handle}`;
+
+  // persist per-account preferences (aliases, mutes, disappearing timers, privacy)
+  const savePrefs = useCallback((partial?: { aliases?: Record<string, string>; muted?: Record<string, boolean>; disappear?: Record<string, number>; privacy?: typeof privacy }) => {
+    try {
+      const cur = { aliases, muted: mutedPeers, disappear, privacy, ...partial };
+      localStorage.setItem(prefsKey(), JSON.stringify(cur));
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aliases, mutedPeers, disappear, privacy]);
+  useEffect(() => { if (stage === "chat") savePrefs(); }, [aliases, mutedPeers, disappear, privacy, stage, savePrefs]);
 
   const saveConvo = useCallback(async (peer: string, c: Convo) => {
     if (!vaultRef.current) return;
@@ -353,7 +386,7 @@ export default function MessengerPage() {
         const isActive = activeRef.current === peer;
         return { ...c, messages: [...c.messages, msg], unread: msg.mine || isActive ? c.unread : c.unread + 1, typing: false };
       });
-      if (!msg.mine && msg.kind !== "system") {
+      if (!msg.mine && msg.kind !== "system" && !mutedRef.current[peer]) {
         if (soundRef.current) blip("in");
         // desktop notification when the tab is in the background
         if (notifyRef.current && typeof document !== "undefined" && document.hidden && "Notification" in window && Notification.permission === "granted") {
@@ -429,8 +462,8 @@ export default function MessengerPage() {
           const text = await openSeal(cs.keys, data.c);
           if (data.kind === "image") addMsg(peer, { id: data.id || crypto.randomUUID(), mine: false, kind: "image", dataUrl: text, ts: Date.now(), reply: data.reply || null });
           else if (data.kind === "voice") addMsg(peer, { id: data.id || crypto.randomUUID(), mine: false, kind: "voice", dataUrl: text, dur: data.dur, ts: Date.now() });
-          else addMsg(peer, { id: data.id || crypto.randomUUID(), mine: false, kind: "text", text, ts: Date.now(), reply: data.reply || null });
-          if (activeRef.current === peer) send(peer, { t: "seen" });
+          else addMsg(peer, { id: data.id || crypto.randomUUID(), mine: false, kind: "text", text, ts: Date.now(), reply: data.reply || null, fwd: !!data.fwd });
+          if (activeRef.current === peer && privacyRef.current.readReceipts) send(peer, { t: "seen" });
         } catch {}
       } else if (data.t === "file-meta") {
         fileRecv.current[data.id] = { name: data.name, mime: data.mime, total: data.total, parts: new Array(data.total), got: 0 };
@@ -667,6 +700,11 @@ export default function MessengerPage() {
     }
     if (Object.keys(loaded).length) setConvos((prev) => ({ ...loaded, ...prev }));
     try { const v = localStorage.getItem(verifKey()); if (v) setVerified(JSON.parse(v)); } catch {}
+    try {
+      const s = localStorage.getItem(prefsKey());
+      if (s) { const j = JSON.parse(s); setAliases(j.aliases || {}); setMutedPeers(j.muted || {}); setDisappear(j.disappear || {}); setPrivacy((p) => ({ ...p, ...(j.privacy || {}) })); }
+    } catch {}
+    try { const d = localStorage.getItem(draftsKey()); if (d) draftsRef.current = JSON.parse(d); } catch {}
   }, []);
 
   const signIn = async (e: React.FormEvent) => {
@@ -860,7 +898,7 @@ export default function MessengerPage() {
   };
 
   const onType = () => {
-    if (!active) return;
+    if (!active || !privacyRef.current.typingIndicator) return;
     send(active, { t: "typing", on: true });
     clearTimeout(typingTimer.current[active]);
     typingTimer.current[active] = setTimeout(() => send(active, { t: "typing", on: false }), 1500);
@@ -868,9 +906,86 @@ export default function MessengerPage() {
   const openConvo = (peer: string) => {
     setActive(peer); setShowSidebar(false); setSearchOpen(false); setQuery(""); setAtBottom(true);
     upsert(peer, (c) => ({ ...c, unread: 0 }), false);
-    if (connsRef.current[peer]?.conn?.open) send(peer, { t: "seen" });
+    if (connsRef.current[peer]?.conn?.open && privacyRef.current.readReceipts) send(peer, { t: "seen" });
+    // restore any saved draft for this conversation
+    setInput(draftsRef.current[peer] || "");
   };
   const clearConvo = () => { if (!active) return; try { localStorage.removeItem(storeKey(active)); } catch {} upsert(active, (c) => ({ ...c, messages: [] }), false); };
+
+  // --- persist drafts as you type (per conversation) ---
+  useEffect(() => {
+    if (stage !== "chat" || !active || editing) return;
+    draftsRef.current[active] = input;
+    try { localStorage.setItem(draftsKey(), JSON.stringify(draftsRef.current)); } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [input, active, editing, stage]);
+
+  // --- disappearing messages: prune expired messages on a short cadence ---
+  useEffect(() => {
+    if (!Object.values(disappear).some((s) => s > 0)) return;
+    const iv = setInterval(() => {
+      const now = Date.now();
+      setConvos((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const peer in prev) {
+          const secs = disappear[peer];
+          if (!secs) continue;
+          const kept = prev[peer].messages.filter((m) => m.starred || m.pinned || m.kind === "system" || now - m.ts < secs * 1000);
+          if (kept.length !== prev[peer].messages.length) { next[peer] = { ...prev[peer], messages: kept }; changed = true; }
+        }
+        return changed ? next : prev;
+      });
+    }, 3000);
+    return () => clearInterval(iv);
+  }, [disappear]);
+
+  // --- message actions: pin / star / forward ---
+  const togglePin = (m: Msg) => { if (!active) return; upsert(active, (c) => ({ ...c, messages: c.messages.map((x) => (x.id === m.id ? { ...x, pinned: !x.pinned } : x)) })); };
+  const toggleStar = (m: Msg, peer: string | null = active) => { if (!peer) return; upsert(peer, (c) => ({ ...c, messages: c.messages.map((x) => (x.id === m.id ? { ...x, starred: !x.starred } : x)) })); };
+
+  const forwardTo = async (peer: string) => {
+    const m = forwarding;
+    setForwarding(null);
+    if (!m || !peer) return;
+    const cs = connsRef.current[peer];
+    const id = crypto.randomUUID();
+    const openConn = !!(cs?.keys && cs.conn?.open);
+    try {
+      if (m.kind === "text" && m.text) {
+        if (openConn) { send(peer, { t: "msg", id, kind: "text", c: await seal(cs!.keys!, m.text), fwd: true }); addMsg(peer, { id, mine: true, kind: "text", text: m.text, ts: Date.now(), status: "sent", fwd: true }); }
+        else { (outboxRef.current[peer] = outboxRef.current[peer] || []).push({ id, text: m.text, reply: null }); addMsg(peer, { id, mine: true, kind: "text", text: m.text, ts: Date.now(), status: "pending", fwd: true }); const h = connsRef.current[peer]?.handle; if (h && !cs?.conn?.open) connectTo(h); }
+      } else if (m.kind === "image" && m.dataUrl && openConn) {
+        send(peer, { t: "msg", id, kind: "image", c: await seal(cs!.keys!, m.dataUrl), fwd: true }); addMsg(peer, { id, mine: true, kind: "image", dataUrl: m.dataUrl, ts: Date.now(), status: "sent", fwd: true });
+      } else if (m.kind === "voice" && m.dataUrl && openConn) {
+        send(peer, { t: "msg", id, kind: "voice", dur: m.dur, c: await seal(cs!.keys!, m.dataUrl) }); addMsg(peer, { id, mine: true, kind: "voice", dataUrl: m.dataUrl, dur: m.dur, ts: Date.now(), status: "sent" });
+      }
+    } catch {}
+    openConvo(peer);
+  };
+
+  // --- conversation-level: rename / mute / disappearing / export ---
+  const renameContact = () => {
+    if (!cur) return;
+    const v = window.prompt(T.renamePh, aliases[cur.handle] || nameOf(cur));
+    if (v === null) return;
+    const h = cur.handle;
+    setAliases((a) => { const n = { ...a }; if (v.trim() && v.trim() !== h.split("#")[0]) n[h] = v.trim(); else delete n[h]; return n; });
+    setShowConvoMenu(false);
+  };
+  const toggleMuteChat = () => { if (!active) return; setMutedPeers((m) => ({ ...m, [active]: !m[active] })); setShowConvoMenu(false); };
+  const setDisappearFor = (secs: number) => { if (!active) return; setDisappear((d) => { const n = { ...d }; if (secs > 0) n[active] = secs; else delete n[active]; return n; }); };
+  const exportChat = () => {
+    if (!cur) return;
+    const lines = cur.messages.filter((m) => m.kind !== "system").map((m) => {
+      const who = m.mine ? "You" : nameOf(cur);
+      const body = m.deleted ? "(deleted)" : m.kind === "text" ? (m.text || "") : m.kind === "image" ? "(image)" : m.kind === "voice" ? `(voice ${fmtDur(m.dur || 0)})` : m.kind === "file" ? `(file: ${m.file?.name})` : "";
+      return `[${new Date(m.ts).toLocaleString()}] ${who}: ${body}`;
+    });
+    const blob = new Blob([`Cipher — chat with ${cur.handle}\nExported ${new Date().toLocaleString()}\n\n${lines.join("\n")}\n`], { type: "text/plain" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `cipher-${nameOf(cur)}.txt`; a.click(); URL.revokeObjectURL(a.href);
+    setShowConvoMenu(false);
+  };
   const markVerified = () => {
     if (!active) return;
     const h = connsRef.current[active]?.handle;
@@ -900,6 +1015,17 @@ export default function MessengerPage() {
   const curVerified = curCs ? verified[curCs.handle] : false;
   const curLat = active ? latency[active] : undefined;
   const shown = cur ? (query.trim() ? cur.messages.filter((m) => (m.text || "").toLowerCase().includes(query.toLowerCase())) : cur.messages) : [];
+  const pinnedMsgs = cur ? cur.messages.filter((m) => m.pinned && !m.deleted) : [];
+  const savedMsgs = useMemo(() => {
+    const out: { peer: string; handle: string; m: Msg }[] = [];
+    for (const p in convos) for (const m of convos[p].messages) if (m.starred && !m.deleted) out.push({ peer: p, handle: convos[p].handle, m });
+    return out.sort((a, b) => b.m.ts - a.m.ts);
+  }, [convos]);
+  const gq = globalQuery.trim().toLowerCase();
+  const visibleConvos = gq
+    ? convoList.filter((c) => c.handle.toLowerCase().includes(gq) || (aliases[c.handle] || "").toLowerCase().includes(gq) || c.messages.some((m) => (m.text || "").toLowerCase().includes(gq)))
+    : convoList;
+  const curDisappear = active ? disappear[active] || 0 : 0;
 
   /* ================= AUTH ================= */
   if (stage === "auth") {
@@ -1007,10 +1133,15 @@ export default function MessengerPage() {
             </div>
             {connectErr && <p className="mt-2 text-xs" style={{ color: "#ff6a6a" }}>{connectErr}</p>}
           </div>
+          <div className="flex items-center gap-2 border-b px-3 py-2" style={{ borderColor: "var(--line)" }}>
+            <input value={globalQuery} onChange={(e) => setGlobalQuery(e.target.value)} placeholder={T.searchAll} className="min-w-0 flex-1 rounded-lg border bg-transparent px-3 py-1.5 text-sm outline-none" style={{ borderColor: "var(--line)", background: "var(--bg-3)" }} />
+            <button onClick={() => setShowSaved(true)} title={T.saved} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border" style={{ borderColor: "var(--line-2)", color: savedMsgs.length ? "var(--accent)" : undefined }}>★</button>
+            <button onClick={() => setShowPrivacy(true)} title={T.privacy} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border" style={{ borderColor: "var(--line-2)" }}><Icon name="shield" size={14} /></button>
+          </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-2 thin-scroll">
             <p className="label px-2 py-2">{T.convos}</p>
-            {convoList.length === 0 && <p className="px-3 text-sm text-[var(--fg-2)]">{T.none}</p>}
-            {convoList.map((c) => {
+            {visibleConvos.length === 0 && <p className="px-3 text-sm text-[var(--fg-2)]">{gq ? T.noResults : T.none}</p>}
+            {visibleConvos.map((c) => {
               const last = c.messages[c.messages.length - 1];
               const on = connsRef.current[c.peer]?.conn?.open;
               const preview = c.typing ? T.typing : last ? (last.kind === "image" ? "🖼️" : last.kind === "voice" ? "🎙️" : last.kind === "file" ? "📎 " + (last.file?.name || "") : last.text) : "…";
@@ -1022,7 +1153,7 @@ export default function MessengerPage() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center justify-between gap-2">
-                      <b className="truncate text-sm force-ltr">{c.handle}</b>
+                      <b className="truncate text-sm force-ltr">{aliases[c.handle] || c.handle}{mutedPeers[c.peer] ? <span className="ms-1">🔕</span> : null}</b>
                       {last && <span className="mono shrink-0 text-[10px] text-[var(--fg-2)]">{time(last.ts)}</span>}
                     </span>
                     <span className="mt-0.5 flex items-center justify-between gap-2">
@@ -1053,7 +1184,7 @@ export default function MessengerPage() {
                   <button onClick={() => setShowSidebar(true)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border sm:hidden" style={{ borderColor: "var(--line-2)" }}>←</button>
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full font-display text-lg uppercase" style={{ background: "var(--bg-3)", border: "1px solid var(--line)" }}>{nameOf(cur).charAt(0)}</span>
                   <div className="min-w-0">
-                    <b className="flex items-center gap-1.5 truncate text-sm force-ltr">{cur.handle}{curVerified && <span title={T.verified} style={{ color: "var(--accent)" }}>✔</span>}</b>
+                    <b className="flex items-center gap-1.5 truncate text-sm force-ltr">{aliases[cur.handle] || cur.handle}{mutedPeers[cur.peer] ? <span title={T.mutedTag}>🔕</span> : null}{curVerified && <span title={T.verified} style={{ color: "var(--accent)" }}>✔</span>}</b>
                     <span className="flex items-center gap-1.5 text-xs text-[var(--fg-2)]">
                       <span className="h-1.5 w-1.5 rounded-full" style={{ background: curReady ? "#27c93f" : "#eab308" }} />
                       {curReady ? T.secured : T.connecting}{curLat != null && <span className="mono">· {curLat}{T.ping}</span>}
@@ -1066,7 +1197,29 @@ export default function MessengerPage() {
                   <button onClick={() => startCall("screen")} disabled={!curReady} className="hidden h-9 w-9 place-items-center rounded-full border transition-all hover:scale-110 hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-40 sm:grid" style={{ borderColor: "var(--line-2)" }} title={T.screen}><Icon name="screen" size={16} /></button>
                   <button onClick={() => { setSearchOpen((s) => !s); setQuery(""); }} className="grid h-9 w-9 place-items-center rounded-full border transition-all hover:scale-110 hover:border-[var(--accent)] hover:text-[var(--accent)]" style={{ borderColor: "var(--line-2)" }} title="search"><Icon name="search" size={16} /></button>
                   {curFp && <button onClick={() => setShowSafety((s) => !s)} className="grid h-9 w-9 place-items-center rounded-full border transition-all hover:scale-110 hover:text-[var(--accent)]" style={{ borderColor: curVerified ? "var(--accent)" : "var(--line-2)", color: curVerified ? "var(--accent)" : undefined }} title={T.safety}><Icon name="shield" size={16} /></button>}
-                  <button onClick={clearConvo} className="hidden h-9 w-9 place-items-center rounded-full border transition-all hover:scale-110 hover:border-[#ff6a6a] hover:text-[#ff6a6a] sm:grid" style={{ borderColor: "var(--line-2)" }} title={T.clear}><Icon name="trash" size={16} /></button>
+                  <div className="relative">
+                    <button onClick={() => setShowConvoMenu((s) => !s)} className="grid h-9 w-9 place-items-center rounded-full border transition-all hover:scale-110 hover:text-[var(--accent)]" style={{ borderColor: showConvoMenu ? "var(--accent)" : "var(--line-2)" }} title={T.menu}>⋯</button>
+                    {showConvoMenu && (
+                      <>
+                        <div className="fixed inset-0 z-20" onClick={() => setShowConvoMenu(false)} />
+                        <div className="absolute end-0 z-30 mt-1 w-60 rounded-2xl border p-1.5 text-sm shadow-2xl" style={{ borderColor: "var(--line-2)", background: "var(--bg-2)", boxShadow: "0 24px 48px -20px var(--shadow)" }}>
+                          <button onClick={renameContact} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-start hover:bg-[var(--bg-3)]"><Icon name="edit" size={14} /> {T.rename}</button>
+                          <button onClick={toggleMuteChat} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-start hover:bg-[var(--bg-3)]"><Icon name={mutedPeers[cur.peer] ? "bell" : "bellOff"} size={14} /> {mutedPeers[cur.peer] ? T.unmuteChat : T.muteChat}</button>
+                          <button onClick={exportChat} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-start hover:bg-[var(--bg-3)]"><Icon name="down" size={14} /> {T.exportChat}</button>
+                          <button onClick={() => { setShowSaved(true); setShowConvoMenu(false); }} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-start hover:bg-[var(--bg-3)]">★ {T.saved}</button>
+                          <button onClick={clearConvo} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-start text-[#ff6a6a] hover:bg-[var(--bg-3)]"><Icon name="trash" size={14} /> {T.clear}</button>
+                          <div className="mt-1 border-t px-3 pb-1 pt-2" style={{ borderColor: "var(--line)" }}>
+                            <div className="label mb-1.5">⏱ {T.disappearing}</div>
+                            <div className="flex flex-wrap gap-1">
+                              {[[0, T.off], [30, `30${T.secs}`], [300, `5${T.mins}`], [3600, `60${T.mins}`]].map(([s, lab]) => (
+                                <button key={s as number} onClick={() => setDisappearFor(s as number)} className="rounded-lg border px-2 py-1 text-xs" style={{ borderColor: curDisappear === s ? "var(--accent)" : "var(--line-2)", color: curDisappear === s ? "var(--accent)" : "var(--fg-2)" }}>{lab}</button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1081,6 +1234,21 @@ export default function MessengerPage() {
                   <p className="mono select-all text-sm force-ltr" style={{ color: "var(--accent)", letterSpacing: "0.15em" }}>{safetyNumber(curFp)}</p>
                   <p className="mt-2 text-xs text-[var(--fg-2)]">{T.safetyNote}</p>
                   {!curVerified ? <button onClick={markVerified} className="btn btn-accent mt-3 px-4 py-2 text-sm">{T.verify}</button> : <p className="mt-3 text-sm" style={{ color: "var(--accent)" }}>✔ {T.verified}</p>}
+                </div>
+              )}
+
+              {pinnedMsgs.length > 0 && (
+                <div className="flex items-center gap-2 border-b px-4 py-1.5 text-xs" style={{ borderColor: "var(--line)", background: "var(--bg-2)" }}>
+                  <span style={{ color: "var(--accent)" }}>📌</span>
+                  <button onClick={() => jumpTo(pinnedMsgs[pinnedMsgs.length - 1].id)} className="min-w-0 flex-1 truncate text-start text-[var(--fg-2)] hover:text-[var(--fg)]">
+                    {(pinnedMsgs[pinnedMsgs.length - 1].text || (pinnedMsgs[pinnedMsgs.length - 1].kind === "image" ? "🖼️" : pinnedMsgs[pinnedMsgs.length - 1].kind === "voice" ? "🎙️" : "📎")).slice(0, 80)}
+                  </button>
+                  <span className="mono shrink-0 text-[10px] text-[var(--fg-2)]">{pinnedMsgs.length} {T.pinned}</span>
+                </div>
+              )}
+              {curDisappear > 0 && (
+                <div className="border-b px-4 py-1 text-center text-[11px]" style={{ borderColor: "var(--line)", background: "color-mix(in srgb, var(--accent) 8%, var(--bg-2))", color: "var(--accent)" }}>
+                  ⏱ {T.disappearing}: {curDisappear >= 60 ? `${curDisappear / 60}${T.mins}` : `${curDisappear}${T.secs}`}
                 </div>
               )}
 
@@ -1110,7 +1278,8 @@ export default function MessengerPage() {
                       {showDay && <DayDivider label={dayLabel(m.ts)} />}
                       <div className={`msg-row group flex items-end gap-1.5 ${m.mine ? "flex-row-reverse" : ""}`}>
                         <div id={`msg-${m.id}`} className="relative max-w-[80%] transition-all duration-300 hover:-translate-y-0.5" style={highlightId === m.id ? { boxShadow: "0 0 0 2px var(--accent)", borderRadius: 18 } : undefined}>
-                          <div className="msg-bubble rounded-2xl px-3.5 py-2 text-[14.5px] leading-relaxed" style={m.mine ? { background: "linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 78%, var(--accent-2)))", color: "var(--on-accent)", borderEndEndRadius: 5, boxShadow: "0 6px 18px -10px var(--glow)" } : { background: "var(--bg-3)", borderEndStartRadius: 5, boxShadow: "0 4px 14px -10px var(--shadow)" }}>
+                          <div className="msg-bubble rounded-2xl px-3.5 py-2 leading-relaxed" style={{ fontSize: `${(14.5 * privacy.fontScale).toFixed(1)}px`, ...(m.mine ? { background: "linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 78%, var(--accent-2)))", color: "var(--on-accent)", borderEndEndRadius: 5, boxShadow: "0 6px 18px -10px var(--glow)" } : { background: "var(--bg-3)", borderEndStartRadius: 5, boxShadow: "0 4px 14px -10px var(--shadow)" }) }}>
+                            {m.fwd && !m.deleted && <div className="mb-1 flex items-center gap-1 text-[10px] italic" style={{ opacity: 0.7 }}>⤳ {T.forwarded}</div>}
                             {m.reply && <button onClick={() => m.reply && jumpTo(m.reply.id)} className="mb-1.5 block w-full rounded-lg border-s-2 px-2 py-1 text-start text-xs opacity-80 transition-opacity hover:opacity-100" style={{ borderColor: m.mine ? "rgba(0,0,0,0.35)" : "var(--accent)", background: m.mine ? "rgba(0,0,0,0.08)" : "var(--bg-2)" }}>{m.reply.preview}</button>}
                             {m.deleted ? (
                               <span className="flex items-center gap-1.5 italic opacity-70"><Icon name="trash" size={13} /> {T.msgDeleted}</span>
@@ -1133,6 +1302,8 @@ export default function MessengerPage() {
                               <div className="mt-1.5 h-1 overflow-hidden rounded-full" style={{ background: "rgba(0,0,0,0.15)" }}><div className="h-full rounded-full" style={{ width: `${m.progress}%`, background: m.mine ? "var(--on-accent)" : "var(--accent)" }} /></div>
                             )}
                             <span className="mt-1 flex items-center justify-end gap-1 text-[10px]" style={{ opacity: 0.7 }}>
+                              {m.pinned && <span title={T.pinned}>📌</span>}
+                              {m.starred && <span style={{ color: "var(--accent)" }}>★</span>}
                               {m.edited && <span className="italic">{T.edited}</span>}
                               <span className="mono force-ltr">{time(m.ts)}</span>
                               {m.mine && <span title={m.status === "pending" ? T.queued : undefined}>{m.status === "pending" ? "🕓" : m.status === "seen" ? "✓✓" : "✓"}</span>}
@@ -1152,6 +1323,9 @@ export default function MessengerPage() {
                         <div className="flex shrink-0 flex-wrap gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                           <button onClick={() => setReactFor(reactFor === m.id ? null : m.id)} className="grid h-6 w-6 place-items-center rounded-full transition-transform hover:scale-110 hover:text-[var(--accent)]" style={{ background: "var(--bg-2)", border: "1px solid var(--line)" }} title={T.react}><Icon name="smile" size={12} /></button>
                           <button onClick={() => setReplyTo(m)} className="grid h-6 w-6 place-items-center rounded-full transition-transform hover:scale-110 hover:text-[var(--accent)]" style={{ background: "var(--bg-2)", border: "1px solid var(--line)" }} title={T.reply}><Icon name="reply" size={12} /></button>
+                          {!m.deleted && <button onClick={() => setForwarding(m)} className="grid h-6 w-6 place-items-center rounded-full transition-transform hover:scale-110 hover:text-[var(--accent)]" style={{ background: "var(--bg-2)", border: "1px solid var(--line)" }} title={T.forward}>⤳</button>}
+                          {!m.deleted && <button onClick={() => toggleStar(m)} className="grid h-6 w-6 place-items-center rounded-full text-[11px] transition-transform hover:scale-110 hover:text-[var(--accent)]" style={{ background: "var(--bg-2)", border: "1px solid var(--line)", color: m.starred ? "var(--accent)" : undefined }} title={T.star}>★</button>}
+                          {!m.deleted && <button onClick={() => togglePin(m)} className="grid h-6 w-6 place-items-center rounded-full text-[11px] transition-transform hover:scale-110 hover:text-[var(--accent)]" style={{ background: "var(--bg-2)", border: "1px solid var(--line)", color: m.pinned ? "var(--accent)" : undefined }} title={m.pinned ? T.unpin : T.pin}>📌</button>}
                           {m.kind === "text" && <button onClick={() => copyMsgText(m)} className="grid h-6 w-6 place-items-center rounded-full transition-transform hover:scale-110 hover:text-[var(--accent)]" style={{ background: "var(--bg-2)", border: "1px solid var(--line)" }} title={T.copyText}><Icon name={copied === "m-" + m.id ? "check" : "copy"} size={12} /></button>}
                           {m.mine && m.kind === "text" && !m.deleted && <button onClick={() => startEdit(m)} className="grid h-6 w-6 place-items-center rounded-full transition-transform hover:scale-110 hover:text-[var(--accent)]" style={{ background: "var(--bg-2)", border: "1px solid var(--line)" }} title={T.edit}><Icon name="edit" size={12} /></button>}
                           {m.mine && !m.deleted && <button onClick={() => deleteForEveryone(m)} className="grid h-6 w-6 place-items-center rounded-full transition-transform hover:scale-110 hover:text-[#ff6a6a]" style={{ background: "var(--bg-2)", border: "1px solid var(--line)" }} title={T.deleteEveryone}><Icon name="trash" size={12} /></button>}
@@ -1224,6 +1398,64 @@ export default function MessengerPage() {
           )}
         </main>
       </div>
+
+      {/* FORWARD PICKER */}
+      {forwarding && (
+        <div className="fixed inset-0 z-50 grid place-items-center p-4" style={{ background: "color-mix(in srgb, var(--bg) 55%, transparent)", backdropFilter: "blur(4px)" }} onClick={() => setForwarding(null)}>
+          <div className="flex max-h-[70vh] w-full max-w-sm flex-col rounded-2xl border p-4 shadow-2xl" style={{ borderColor: "var(--line-2)", background: "var(--bg-2)" }} onClick={(e) => e.stopPropagation()}>
+            <div className="mb-2 flex items-center justify-between"><h3 className="font-display text-lg">{T.forwardTo}</h3><button onClick={() => setForwarding(null)} className="text-[var(--fg-2)] hover:text-[var(--fg)]">✕</button></div>
+            <p className="mb-2 truncate rounded-lg border-s-2 px-2 py-1 text-xs text-[var(--fg-2)]" style={{ borderColor: "var(--accent)", background: "var(--bg-3)" }}>{(forwarding.text || (forwarding.kind === "image" ? "🖼️" : forwarding.kind === "voice" ? "🎙️" : "📎")).slice(0, 80)}</p>
+            <div className="min-h-0 flex-1 space-y-1 overflow-y-auto thin-scroll">
+              {convoList.length === 0 && <p className="px-2 py-4 text-center text-sm text-[var(--fg-2)]">{T.none}</p>}
+              {convoList.map((c) => (
+                <button key={c.peer} onClick={() => forwardTo(c.peer)} className="flex w-full items-center gap-3 rounded-xl p-2 text-start hover:bg-[var(--bg-3)]">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full font-display uppercase" style={{ background: "var(--bg-3)", border: "1px solid var(--line)" }}>{nameOf(c).charAt(0)}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm force-ltr">{aliases[c.handle] || c.handle}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SAVED MESSAGES */}
+      {showSaved && (
+        <div className="fixed inset-0 z-50 grid place-items-center p-4" style={{ background: "color-mix(in srgb, var(--bg) 55%, transparent)", backdropFilter: "blur(4px)" }} onClick={() => setShowSaved(false)}>
+          <div className="flex max-h-[75vh] w-full max-w-md flex-col rounded-2xl border p-4 shadow-2xl" style={{ borderColor: "var(--line-2)", background: "var(--bg-2)" }} onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between"><h3 className="font-display text-lg">★ {T.saved}</h3><button onClick={() => setShowSaved(false)} className="text-[var(--fg-2)] hover:text-[var(--fg)]">✕</button></div>
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto thin-scroll">
+              {savedMsgs.length === 0 ? <p className="py-8 text-center text-sm text-[var(--fg-2)]">{T.noSaved}</p> : savedMsgs.map(({ peer, handle, m }) => (
+                <div key={m.id} className="rounded-xl border p-2.5" style={{ borderColor: "var(--line)", background: "var(--bg-3)" }}>
+                  <div className="mb-1 flex items-center justify-between text-[11px] text-[var(--fg-2)]">
+                    <span className="truncate force-ltr">{aliases[handle] || handle}</span>
+                    <span className="mono shrink-0">{new Intl.DateTimeFormat(fa ? "fa-IR" : "en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(m.ts))}</span>
+                  </div>
+                  <div className="text-sm">{m.kind === "text" ? <Linkify text={m.text || ""} /> : m.kind === "image" ? "🖼️ image" : m.kind === "voice" ? "🎙️ voice" : "📎 " + (m.file?.name || "file")}</div>
+                  <div className="mt-1.5 flex gap-2">
+                    <button onClick={() => { openConvo(peer); setShowSaved(false); setTimeout(() => jumpTo(m.id), 200); }} className="text-xs" style={{ color: "var(--accent)" }}>{T.jump}</button>
+                    <button onClick={() => toggleStar(m, peer)} className="text-xs text-[var(--fg-2)] hover:text-[var(--fg)]">★ {T.star}</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PRIVACY */}
+      {showPrivacy && (
+        <div className="fixed inset-0 z-50 grid place-items-center p-4" style={{ background: "color-mix(in srgb, var(--bg) 55%, transparent)", backdropFilter: "blur(4px)" }} onClick={() => setShowPrivacy(false)}>
+          <div className="w-full max-w-sm space-y-4 rounded-2xl border p-5 shadow-2xl" style={{ borderColor: "var(--line-2)", background: "var(--bg-2)" }} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between"><h3 className="font-display text-lg">{T.privacy}</h3><button onClick={() => setShowPrivacy(false)} className="text-[var(--fg-2)] hover:text-[var(--fg)]">✕</button></div>
+            <label className="flex items-center justify-between text-sm"><span>{T.readReceipts}</span><input type="checkbox" checked={privacy.readReceipts} onChange={(e) => setPrivacy((p) => ({ ...p, readReceipts: e.target.checked }))} className="h-4 w-4" /></label>
+            <label className="flex items-center justify-between text-sm"><span>{T.typingInd}</span><input type="checkbox" checked={privacy.typingIndicator} onChange={(e) => setPrivacy((p) => ({ ...p, typingIndicator: e.target.checked }))} className="h-4 w-4" /></label>
+            <div>
+              <div className="mb-1.5 flex justify-between text-sm"><span>{T.textSize}</span><span className="mono text-[var(--fg-2)]">{Math.round(privacy.fontScale * 100)}%</span></div>
+              <input type="range" min={0.85} max={1.4} step={0.05} value={privacy.fontScale} onChange={(e) => setPrivacy((p) => ({ ...p, fontScale: +e.target.value }))} className="w-full" />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CALL OVERLAY */}
       {call && (

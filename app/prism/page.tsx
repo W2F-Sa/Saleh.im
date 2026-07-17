@@ -29,6 +29,31 @@ const THEME_PRESETS: { name: string; accent: string; radius: number; density: nu
   { name: "Cyber", accent: "#22d3ee", radius: 2, density: 11, font: 14, border: 1, shadow: 30, dark: true },
 ];
 
+/* ---- colour maths for the shade scale + WCAG contrast checker ---- */
+type RGB = { r: number; g: number; b: number };
+const hx = (h: string): RGB => { const s = h.replace("#", ""); const n = parseInt(s.length === 3 ? s.split("").map((c) => c + c).join("") : s.padEnd(6, "0").slice(0, 6), 16); return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }; };
+const toHex = (c: RGB) => "#" + [c.r, c.g, c.b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
+const mix = (a: RGB, b: RGB, t: number): RGB => ({ r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t });
+const relLum = ({ r, g, b }: RGB) => { const f = (v: number) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+const contrastRatio = (a: RGB, b: RGB) => { const L1 = relLum(a), L2 = relLum(b); const hi = Math.max(L1, L2), lo = Math.min(L1, L2); return (hi + 0.05) / (lo + 0.05); };
+const SCALE_STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900];
+const buildScale = (accent: string) => {
+  const a = hx(accent), white = { r: 255, g: 255, b: 255 }, black = { r: 0, g: 0, b: 0 };
+  return SCALE_STEPS.map((step) => {
+    let c: RGB;
+    if (step < 500) c = mix(a, white, ((500 - step) / 450) * 0.92);
+    else if (step > 500) c = mix(a, black, ((step - 500) / 400) * 0.72);
+    else c = a;
+    return { step, hex: toHex(c) };
+  });
+};
+const FONT_FAMILIES: Record<string, string> = {
+  sans: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  serif: "ui-serif, Georgia, 'Times New Roman', serif",
+  mono: "ui-monospace, 'SF Mono', 'JetBrains Mono', monospace",
+};
+const randHex = () => toHex({ r: Math.random() * 255, g: Math.random() * 255, b: Math.random() * 255 });
+
 export default function PrismPage() {
   const { lang } = useLang();
   const fa = lang === "fa";
@@ -41,6 +66,7 @@ export default function PrismPage() {
   const [shadow, setShadow] = useState(18);
   const [dark, setDark] = useState(true);
   const [copied, setCopied] = useState("");
+  const [family, setFamily] = useState<"sans" | "serif" | "mono">("sans");
 
   // live component demo state
   const [tab, setTab] = useState(0);
@@ -52,8 +78,8 @@ export default function PrismPage() {
   const [seg, setSeg] = useState(1);
 
   const T = fa
-    ? { back: "بازگشت", brand: "پریزم", tagline: "کیتِ رابطِ بی‌سر و آزمایشگاهِ دیزاین‌سیستم", tokens: "توکن‌ها", accent: "رنگِ تأکید", radius: "گردیِ گوشه", density: "تراکم", font: "اندازهٔ فونت", border: "ضخامتِ خط", shadow: "سایه", surface: "سطح", darkS: "تیره", lightS: "روشن", copyCss: "کپیِ متغیرهای CSS", copyTw: "کپیِ تمِ Tailwind", copied: "کپی شد!", buttons: "دکمه‌ها", inputs: "ورودی‌ها", selection: "انتخاب", feedback: "بازخورد", surfaces: "سطوح و ناوبری", primary: "اصلی", outline: "خطی", ghost: "شبح", danger: "خطر", placeholder: "یک چیزی بنویس…", option: "گزینه", switch: "سوییچ", check: "چک‌باکس", tabs: ["نمای کلی", "فعالیت", "تنظیمات"], openModal: "بازکردنِ مودال", modalTitle: "مودالِ نمونه", modalBody: "این یک دیالوگِ کاملاً تم‌پذیر است که با همان توکن‌ها استایل گرفته.", close: "بستن", ok: "باشه", success: "با موفقیت ذخیره شد.", warn: "فضای دیسک رو به اتمام است.", error: "اتصال برقرار نشد.", info: "یک نسخهٔ جدید در دسترس است.", progress: "پیشرفت", slider: "اسلایدر", segmented: "قطعه‌ای", avatars: "آواتارها", badge: "نشان", new: "جدید", pro: "حرفه‌ای" }
-    : { back: "back", brand: "Prism", tagline: "Headless UI kit & design-system playground", tokens: "Tokens", accent: "Accent", radius: "Corner radius", density: "Density", font: "Font size", border: "Border width", shadow: "Shadow", surface: "Surface", darkS: "Dark", lightS: "Light", copyCss: "Copy CSS variables", copyTw: "Copy Tailwind theme", copied: "Copied!", buttons: "Buttons", inputs: "Inputs", selection: "Selection", feedback: "Feedback", surfaces: "Surfaces & navigation", primary: "Primary", outline: "Outline", ghost: "Ghost", danger: "Danger", placeholder: "Type something…", option: "Option", switch: "Switch", check: "Checkbox", tabs: ["Overview", "Activity", "Settings"], openModal: "Open modal", modalTitle: "Example dialog", modalBody: "A fully theme-aware dialog styled from the very same tokens.", close: "Close", ok: "Got it", success: "Saved successfully.", warn: "You're running low on disk space.", error: "Could not connect.", info: "A new version is available.", progress: "Progress", slider: "Slider", segmented: "Segmented", avatars: "Avatars", badge: "Badge", new: "New", pro: "Pro" };
+    ? { back: "بازگشت", brand: "پریزم", tagline: "کیتِ رابطِ بی‌سر و آزمایشگاهِ دیزاین‌سیستم", tokens: "توکن‌ها", accent: "رنگِ تأکید", radius: "گردیِ گوشه", density: "تراکم", font: "اندازهٔ فونت", border: "ضخامتِ خط", shadow: "سایه", surface: "سطح", darkS: "تیره", lightS: "روشن", copyCss: "کپیِ متغیرهای CSS", copyTw: "کپیِ تمِ Tailwind", copied: "کپی شد!", buttons: "دکمه‌ها", inputs: "ورودی‌ها", selection: "انتخاب", feedback: "بازخورد", surfaces: "سطوح و ناوبری", primary: "اصلی", outline: "خطی", ghost: "شبح", danger: "خطر", placeholder: "یک چیزی بنویس…", option: "گزینه", switch: "سوییچ", check: "چک‌باکس", tabs: ["نمای کلی", "فعالیت", "تنظیمات"], openModal: "بازکردنِ مودال", modalTitle: "مودالِ نمونه", modalBody: "این یک دیالوگِ کاملاً تم‌پذیر است که با همان توکن‌ها استایل گرفته.", close: "بستن", ok: "باشه", success: "با موفقیت ذخیره شد.", warn: "فضای دیسک رو به اتمام است.", error: "اتصال برقرار نشد.", info: "یک نسخهٔ جدید در دسترس است.", progress: "پیشرفت", slider: "اسلایدر", segmented: "قطعه‌ای", avatars: "آواتارها", badge: "نشان", new: "جدید", pro: "حرفه‌ای", scaleTitle: "طیفِ رنگِ تأکید", contrast: "کنتراستِ متن", contrastNote: "بهترین رنگِ متن روی رنگِ تأکید", family: "خانوادهٔ فونت", fSans: "بی‌سریف", fSerif: "سریف", fMono: "تک‌عرض", copyJson: "کپیِ توکن‌های JSON", copyScss: "کپیِ SCSS", randomize: "تصادفی", copyHex: "برای کپی کلیک کن" }
+    : { back: "back", brand: "Prism", tagline: "Headless UI kit & design-system playground", tokens: "Tokens", accent: "Accent", radius: "Corner radius", density: "Density", font: "Font size", border: "Border width", shadow: "Shadow", surface: "Surface", darkS: "Dark", lightS: "Light", copyCss: "Copy CSS variables", copyTw: "Copy Tailwind theme", copied: "Copied!", buttons: "Buttons", inputs: "Inputs", selection: "Selection", feedback: "Feedback", surfaces: "Surfaces & navigation", primary: "Primary", outline: "Outline", ghost: "Ghost", danger: "Danger", placeholder: "Type something…", option: "Option", switch: "Switch", check: "Checkbox", tabs: ["Overview", "Activity", "Settings"], openModal: "Open modal", modalTitle: "Example dialog", modalBody: "A fully theme-aware dialog styled from the very same tokens.", close: "Close", ok: "Got it", success: "Saved successfully.", warn: "You're running low on disk space.", error: "Could not connect.", info: "A new version is available.", progress: "Progress", slider: "Slider", segmented: "Segmented", avatars: "Avatars", badge: "Badge", new: "New", pro: "Pro", scaleTitle: "Accent scale", contrast: "Text contrast", contrastNote: "Best text colour on the accent", family: "Font family", fSans: "Sans", fSerif: "Serif", fMono: "Mono", copyJson: "Copy JSON tokens", copyScss: "Copy SCSS", randomize: "Randomize", copyHex: "Click to copy" };
 
   // scoped token variables for the preview surface
   const surfBg = dark ? "#0e1017" : "#ffffff";
@@ -103,6 +129,17 @@ export default {
     },
   },
 };`, [accent, radius, density, font, shadow]);
+
+  const scale = useMemo(() => buildScale(accent), [accent]);
+  const accRgb = hx(accent);
+  const cW = contrastRatio(accRgb, { r: 255, g: 255, b: 255 });
+  const cB = contrastRatio(accRgb, { r: 0, g: 0, b: 0 });
+  const bestText = cW >= cB ? "#ffffff" : "#000000";
+  const bestRatio = Math.max(cW, cB);
+  const rating = bestRatio >= 7 ? "AAA" : bestRatio >= 4.5 ? "AA" : bestRatio >= 3 ? "AA Large" : "Fail";
+  const jsonText = useMemo(() => JSON.stringify({ accent, radius, density, fontSize: font, borderWidth: border, shadow, fontFamily: family, scale: Object.fromEntries(scale.map((s) => [s.step, s.hex])) }, null, 2), [accent, radius, density, font, border, shadow, family, scale]);
+  const scssText = useMemo(() => [`$accent: ${accent};`, `$radius: ${radius}px;`, `$space: ${density}px;`, `$font-size: ${font}px;`, `$border-width: ${border}px;`, `$shadow: 0 ${shadow}px ${shadow * 2.4}px -${shadow}px ${accent}55;`, "", ...scale.map((s) => `$accent-${s.step}: ${s.hex};`)].join("\n"), [accent, radius, density, font, border, shadow, scale]);
+  const randomize = () => { setAccent(randHex()); setRadius(Math.floor(Math.random() * 24)); setDensity(8 + Math.floor(Math.random() * 12)); setShadow(Math.floor(Math.random() * 40)); setBorder(Math.floor(Math.random() * 3)); };
 
   const copy = (text: string, key: string) => { navigator.clipboard?.writeText(text); setCopied(key); setTimeout(() => setCopied(""), 1600); };
   const applyPreset = (p: typeof THEME_PRESETS[number]) => { setAccent(p.accent); setRadius(p.radius); setDensity(p.density); setFont(p.font); setBorder(p.border); setShadow(p.shadow); setDark(p.dark); };
@@ -191,17 +228,43 @@ export default {
                 <button onClick={() => setDark(false)} className="flex-1 rounded-lg py-1.5 text-xs" style={{ background: !dark ? "var(--accent)" : "var(--bg-3)", color: !dark ? "var(--on-accent)" : "var(--fg-2)" }}>{T.lightS}</button>
               </div>
             </Row>
+            <Row label={T.family}>
+              <div className="flex gap-1.5">
+                {(["sans", "serif", "mono"] as const).map((f) => (
+                  <button key={f} onClick={() => setFamily(f)} className="flex-1 rounded-lg py-1.5 text-xs" style={{ background: family === f ? "var(--accent)" : "var(--bg-3)", color: family === f ? "var(--on-accent)" : "var(--fg-2)", fontFamily: FONT_FAMILIES[f] }}>{f === "sans" ? T.fSans : f === "serif" ? T.fSerif : T.fMono}</button>
+                ))}
+              </div>
+            </Row>
+            <div className="flex items-center justify-between rounded-lg px-3 py-2 text-xs" style={{ background: "var(--bg-3)" }} title={T.contrastNote}>
+              <span className="text-[var(--fg-2)]">{T.contrast}</span>
+              <span className="flex items-center gap-2">
+                <span className="mono rounded px-1.5 py-0.5" style={{ background: accent, color: bestText }}>{bestRatio.toFixed(2)}:1</span>
+                <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: rating === "Fail" ? "#ef444422" : "#22c55e22", color: rating === "Fail" ? "#ef4444" : "#22c55e" }}>{rating}</span>
+              </span>
+            </div>
             <div className="grid grid-cols-2 gap-2 pt-1">
               <button onClick={() => copy(cssText, "css")} className="btn btn-accent text-xs">{copied === "css" ? "✓ " + T.copied : T.copyCss}</button>
               <button onClick={() => copy(twText, "tw")} className="btn btn-outline text-xs">{copied === "tw" ? "✓ " + T.copied : T.copyTw}</button>
-              <button onClick={() => copy(reactSnippet, "rx")} className="btn btn-outline col-span-2 text-xs">{copied === "rx" ? "✓ " + T.copied : (fa ? "کپیِ کامپوننتِ React" : "Copy React component")}</button>
+              <button onClick={() => copy(jsonText, "json")} className="btn btn-outline text-xs">{copied === "json" ? "✓ " + T.copied : T.copyJson}</button>
+              <button onClick={() => copy(scssText, "scss")} className="btn btn-outline text-xs">{copied === "scss" ? "✓ " + T.copied : T.copyScss}</button>
+              <button onClick={() => copy(reactSnippet, "rx")} className="btn btn-outline text-xs">{copied === "rx" ? "✓ " + T.copied : (fa ? "کپیِ کامپوننتِ React" : "Copy React")}</button>
+              <button onClick={randomize} className="btn btn-outline text-xs">🎲 {T.randomize}</button>
             </div>
           </div>
           <pre className="panel max-h-48 overflow-auto p-3 mono text-[11px] text-[var(--fg-2)] thin-scroll force-ltr">{cssText}</pre>
         </div>
 
         {/* live preview surface */}
-        <div className="space-y-5 rounded-3xl p-4 sm:p-6" style={{ ...previewVars, background: "var(--p-bg)", color: "var(--p-fg)", fontSize: "var(--p-font)", boxShadow: "var(--p-shadow)", border: "var(--p-border) solid var(--p-line)" }}>
+        <div className="space-y-5 rounded-3xl p-4 sm:p-6" style={{ ...previewVars, background: "var(--p-bg)", color: "var(--p-fg)", fontSize: "var(--p-font)", fontFamily: FONT_FAMILIES[family], boxShadow: "var(--p-shadow)", border: "var(--p-border) solid var(--p-line)" }}>
+          <Section title={T.scaleTitle}>
+            <div className="flex overflow-hidden rounded-xl" style={{ borderRadius: "var(--p-radius)" }}>
+              {scale.map((s) => (
+                <button key={s.step} onClick={() => copy(s.hex, "sc-" + s.step)} title={`${s.hex} — ${T.copyHex}`} className="group relative h-14 flex-1 transition-transform hover:z-10 hover:scale-105" style={{ background: s.hex }}>
+                  <span className="absolute inset-x-0 bottom-1 text-center text-[9px] font-semibold" style={{ color: relLum(hx(s.hex)) > 0.5 ? "#000" : "#fff" }}>{copied === "sc-" + s.step ? "✓" : s.step}</span>
+                </button>
+              ))}
+            </div>
+          </Section>
           <Section title={T.buttons}>
             <div className="flex flex-wrap items-center gap-2.5">
               <button style={{ ...btnBase, background: "var(--p-accent)", color: "#fff" }}>{T.primary}</button>

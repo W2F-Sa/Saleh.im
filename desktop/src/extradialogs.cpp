@@ -18,6 +18,9 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QPlainTextEdit>
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -732,6 +735,37 @@ LiveMonitorDialog::LiveMonitorDialog(bimport::LiveMonitor* monitor, bool startEn
     auto* tb = new QHBoxLayout();
     auto* rescanBtn = new QPushButton("↻ Check now", this);
     connect(rescanBtn, &QPushButton::clicked, this, [this] { if (monitor_) monitor_->rescanNow(); });
+    auto* diagBtn = new QPushButton("🩺 Diagnostics", this);
+    diagBtn->setObjectName("chip");
+    diagBtn->setToolTip("Why isn't a login showing up? Run a self-check of the SQLite driver, keyring and detected browser profiles.");
+    connect(diagBtn, &QPushButton::clicked, this, [this] {
+        if (!monitor_) return;
+        QDialog dlg(this);
+        dlg.setWindowTitle("Live monitor diagnostics");
+        dlg.setMinimumSize(560, 460);
+        auto* l = new QVBoxLayout(&dlg);
+        auto* intro = new QLabel("A local self-check — this is what Vault can see on this machine right now:", &dlg);
+        intro->setObjectName("muted");
+        intro->setWordWrap(true);
+        l->addWidget(intro);
+        auto* text = new QPlainTextEdit(&dlg);
+        text->setReadOnly(true);
+        text->setPlainText(monitor_->diagnostics());
+        text->setStyleSheet("font-family: monospace; font-size: 12px;");
+        l->addWidget(text, 1);
+        auto* row = new QHBoxLayout();
+        auto* copyBtn = new QPushButton("Copy report", &dlg);
+        copyBtn->setObjectName("chip");
+        connect(copyBtn, &QPushButton::clicked, &dlg, [text] { QGuiApplication::clipboard()->setText(text->toPlainText()); });
+        auto* closeBtn = new QPushButton("Close", &dlg);
+        closeBtn->setObjectName("accent");
+        connect(closeBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+        row->addWidget(copyBtn);
+        row->addStretch();
+        row->addWidget(closeBtn);
+        l->addLayout(row);
+        dlg.exec();
+    });
     auto* markBtn = new QPushButton("Mark all reviewed", this);
     markBtn->setObjectName("chip");
     connect(markBtn, &QPushButton::clicked, this, [this] { if (monitor_) monitor_->markAllReviewed(); rebuildFeed(); });
@@ -739,6 +773,7 @@ LiveMonitorDialog::LiveMonitorDialog(bimport::LiveMonitor* monitor, bool startEn
     clearBtn->setObjectName("chip");
     connect(clearBtn, &QPushButton::clicked, this, [this] { if (monitor_) monitor_->clearFeed(); rebuildFeed(); });
     tb->addWidget(rescanBtn);
+    tb->addWidget(diagBtn);
     tb->addWidget(markBtn);
     tb->addWidget(clearBtn);
     tb->addStretch();

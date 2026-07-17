@@ -76,6 +76,12 @@ public:
     // Force an immediate re-scan (e.g. a manual "check now" button).
     void rescanNow();
 
+    // Human-readable self-check: reports whether the SQLite driver / sqlite3
+    // CLI / keyring helper are present, which browser profiles were found and
+    // how many credentials each yields. This turns a silent "nothing happens"
+    // into an actionable report the user can read straight from the UI.
+    QString diagnostics() const;
+
 signals:
     void newLogin(const bimport::Credential& c);
     void statusChanged(const QString& text);
