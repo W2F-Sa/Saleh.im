@@ -1,6 +1,6 @@
 "use client";
 
-import { pick, type Project } from "@/lib/data";
+import { pick, type Project, BASE_PATH } from "@/lib/data";
 import { useLang } from "./lang-provider";
 
 /* Small decorative preview per project type */
@@ -134,7 +134,12 @@ export function Showcase({ items }: { items: Project[] }) {
   return (
     <div className="mt-12 space-y-5">
       {items.map((p, i) => {
-        const accent = !!p.accent;
+        // Alternate the card treatment down the showcase: theme-coloured, then
+        // white/neutral, then theme-coloured again — regardless of how many
+        // cards are featured.
+        const accent = i % 2 === 0;
+        const isVault = p.name === "Vault";
+        const downloadHref = `${BASE_PATH}/download/`;
         return (
           <div key={p.name} className="sticky" style={{ top: `calc(5.5rem + ${i * 1.5}rem)` }}>
             <a
@@ -157,10 +162,42 @@ export function Showcase({ items }: { items: Project[] }) {
                 <div>
                   <h3 className="display text-4xl sm:text-5xl">{pick(p.title, lang)}</h3>
                   <p className="mt-4 max-w-md leading-relaxed" style={{ opacity: 0.82 }}>{pick(p.description, lang)}</p>
-                  <div className="mt-6 flex flex-wrap gap-2">
+                  <div className="mt-6 flex flex-wrap items-center gap-2">
                     {p.tags.map((tag) => (
                       <span key={tag} className="rounded-full px-3 py-1 mono text-[11px] force-ltr" style={{ border: `1px solid ${accent ? "rgba(0,0,0,0.22)" : "var(--line-2)"}` }}>{tag}</span>
                     ))}
+                    {isVault && (
+                      // The outer card is itself an <a> to /vault, so this
+                      // secondary "Download" action is a button that navigates
+                      // to /download and stops the click from bubbling up.
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          window.location.href = downloadHref;
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            window.location.href = downloadHref;
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-transform hover:scale-[1.04]"
+                        style={{
+                          background: accent ? "rgba(0,0,0,0.85)" : "var(--accent)",
+                          color: accent ? "#fff" : "var(--on-accent)",
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 3v12M7 10l5 5 5-5" />
+                          <path d="M4 21h16" />
+                        </svg>
+                        {lang === "fa" ? "دانلود برای لینوکس" : "Download for Linux"}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

@@ -102,6 +102,20 @@ export const metadata: Metadata = {
 
 /* JSON-LD structured data — Person + WebSite + the suite of apps. Helps search
    engines and rich results understand who Saleh is and what the site offers. */
+/* The full suite of apps, described once and reused for both the structured
+   data below and (implicitly) the sitemap. Each is a free SoftwareApplication
+   authored by Saleh. */
+const FREE_OFFER = { "@type": "Offer", price: "0", priceCurrency: "USD" };
+const SUITE: { name: string; category: string; os: string; path: string; description: string; downloadUrl?: string }[] = [
+  { name: "Vault", category: "SecurityApplication", os: "Web, Linux", path: "/vault", description: "Zero-knowledge password & secrets manager encrypted with Argon2id + XChaCha20-Poly1305. Web app and native Linux (Qt6 + libsodium) build.", downloadUrl: "https://cdn.saleh.im/valut.deb" },
+  { name: "Messenger", category: "CommunicationApplication", os: "Web", path: "/messenger", description: "Serverless, end-to-end encrypted peer-to-peer messenger over WebRTC — keys never leave the device." },
+  { name: "Forge", category: "DeveloperApplication", os: "Web", path: "/forge", description: "A private developer toolbox with 70+ tools — encoders, formatters, generators, converters and crypto utilities — all running locally in the browser." },
+  { name: "Lumen", category: "BusinessApplication", os: "Web", path: "/lumen", description: "A real-time markets dashboard with live data, animated charts, KPI counters and sortable tables." },
+  { name: "Probe", category: "UtilitiesApplication", os: "Web", path: "/probe", description: "A live connection & privacy inspector: public IP, geolocation, real WebRTC candidate gathering and a device fingerprint surface." },
+  { name: "Vanguard", category: "GameApplication", os: "Web", path: "/vanguard", description: "A browser first-person shooter on a hand-written raycast engine — an eight-mission campaign, ten maps, eleven weapons, an undead horde and true peer-to-peer online play." },
+  { name: "Rift", category: "GameApplication", os: "Web", path: "/rift", description: "A 60fps neon arena-survival game on a hand-written Canvas engine — escalating waves, deep upgrades, sentries and sector bosses." },
+];
+
 const JSON_LD = {
   "@context": "https://schema.org",
   "@graph": [
@@ -109,19 +123,23 @@ const JSON_LD = {
       "@type": "Person",
       "@id": `${siteUrl}/#person`,
       name: "Saleh Saghafiani",
-      alternateName: ["Saleh", "صالح ثقفیانی", "im-saleh"],
+      alternateName: ["Saleh", "صالح ثقفیانی", "im-saleh", "salehcodez"],
       url: siteUrl,
       jobTitle: "Software & Network Engineer",
       email: "mailto:salehcodez@gmail.com",
-      sameAs: ["https://github.com/im-saleh"],
+      sameAs: ["https://github.com/im-saleh", "https://t.me/dm_saleh"],
       knowsAbout: [
         "Software Engineering",
         "Web Development",
         "React",
         "Next.js",
         "TypeScript",
-        "Cryptography",
+        "Node.js",
+        "WebRTC",
+        "Applied Cryptography",
         "Computer Networks",
+        "Game Development",
+        "Linux",
       ],
     },
     {
@@ -129,19 +147,40 @@ const JSON_LD = {
       "@id": `${siteUrl}/#website`,
       url: siteUrl,
       name: "saleh.im",
+      alternateName: "Saleh Saghafiani",
       description: DESCRIPTION,
       inLanguage: ["en", "fa"],
       publisher: { "@id": `${siteUrl}/#person` },
+      author: { "@id": `${siteUrl}/#person` },
+    },
+    {
+      "@type": "ProfilePage",
+      "@id": `${siteUrl}/#profilepage`,
+      url: siteUrl,
+      name: "Saleh Saghafiani — Software Engineer",
+      inLanguage: "en",
+      isPartOf: { "@id": `${siteUrl}/#website` },
+      about: { "@id": `${siteUrl}/#person` },
     },
     {
       "@type": "ItemList",
       name: "Projects by Saleh Saghafiani",
-      itemListElement: [
-        { "@type": "SoftwareApplication", name: "Vault", applicationCategory: "SecurityApplication", operatingSystem: "Web, Linux", url: `${siteUrl}/vault` },
-        { "@type": "SoftwareApplication", name: "Messenger", applicationCategory: "CommunicationApplication", operatingSystem: "Web", url: `${siteUrl}/messenger` },
-        { "@type": "SoftwareApplication", name: "Probe", applicationCategory: "UtilitiesApplication", operatingSystem: "Web", url: `${siteUrl}/probe` },
-        { "@type": "SoftwareApplication", name: "Lumen", applicationCategory: "BusinessApplication", operatingSystem: "Web", url: `${siteUrl}/lumen` },
-      ].map((item, i) => ({ "@type": "ListItem", position: i + 1, item })),
+      numberOfItems: SUITE.length,
+      itemListElement: SUITE.map((app, i) => ({
+        "@type": "ListItem",
+        position: i + 1,
+        item: {
+          "@type": "SoftwareApplication",
+          name: app.name,
+          applicationCategory: app.category,
+          operatingSystem: app.os,
+          url: `${siteUrl}${app.path}`,
+          description: app.description,
+          offers: FREE_OFFER,
+          author: { "@id": `${siteUrl}/#person` },
+          ...(app.downloadUrl ? { downloadUrl: app.downloadUrl } : {}),
+        },
+      })),
     },
   ],
 };

@@ -14,10 +14,12 @@ import { Reveal } from "@/components/reveal";
    terminal, staggered cards, scroll reveals.
    ========================================================================== */
 
-const RELEASES = "https://github.com/im-saleh/Saleh.im/releases/latest";
+// Real, direct download of the packaged .deb — served from the CDN so the
+// binary can be dropped in place manually without cutting a GitHub release.
+const DOWNLOAD_URL = "https://cdn.saleh.im/valut.deb";
 const REPO_DESKTOP = "https://github.com/im-saleh/Saleh.im/tree/main/desktop";
 const VERSION = "1.0.0";
-const DEB = `saleh-vault_${VERSION}_amd64.deb`;
+const DEB = "valut.deb";
 
 export default function DownloadPage() {
   const { lang } = useLang();
@@ -43,7 +45,7 @@ export default function DownloadPage() {
         source: "کدِ منبع",
         buildTitle: "ساخت و نصب",
         buildSub: "سه فرمان روی اوبونتو / کوبونتو:",
-        installNote: "یا اگر ‎.deb را از Releases گرفتی:",
+        installNote: "یا اگر ‎.deb را از دکمه‌ی بالا دانلود کردی:",
         featuresTitle: "بیش از ۲۰ امکان",
         securityTitle: "امنیتِ فوق‌بالا",
         howTitle: "رمزنگاری چطور کار می‌کند",
@@ -61,7 +63,7 @@ export default function DownloadPage() {
         source: "Source code",
         buildTitle: "Build & install",
         buildSub: "Three commands on Ubuntu / Kubuntu:",
-        installNote: "Or, if you grabbed the .deb from Releases:",
+        installNote: "Or, if you downloaded the .deb from the button above:",
         featuresTitle: "20+ features",
         securityTitle: "Ultra-high security",
         howTitle: "How the encryption works",
@@ -179,7 +181,7 @@ export default function DownloadPage() {
                 <p className="mono mt-1 text-sm" style={{ color: "var(--accent)" }}>{T.native}</p>
                 <p className="mt-4 max-w-xl text-[var(--fg-2)]">{T.sub}</p>
                 <div className="mt-7 flex flex-wrap gap-3">
-                  <a href={RELEASES} target="_blank" rel="noopener noreferrer" className="btn btn-accent px-5 py-3 text-base" style={{ boxShadow: "0 14px 40px -12px var(--glow)" }}>
+                  <a href={DOWNLOAD_URL} rel="noopener noreferrer" className="btn btn-accent px-5 py-3 text-base" style={{ boxShadow: "0 14px 40px -12px var(--glow)" }}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12M7 10l5 5 5-5" /><path d="M4 21h16" /></svg>
                     {T.getDeb}
                   </a>

@@ -279,32 +279,6 @@ export const projects: Project[] = [
     accent: true,
   },
   {
-    name: "Lumen",
-    title: { en: "Lumen — Live Markets Dashboard", fa: "لومن — داشبورد بازار زنده" },
-    description: {
-      en: "A real-time markets dashboard pulling live data from the CoinGecko API — animated area charts, KPI counters, a market-sentiment gauge, a dominance donut and a sortable table with live sparklines. Real data, buttery-smooth, built in React.",
-      fa: "یک داشبورد بازارِ زنده که داده‌ی واقعی را از API کوین‌گکو می‌گیرد — نمودارهای مساحتیِ متحرک، شمارنده‌های KPI، گیجِ احساسِ بازار، دوناتِ سلطه و جدولِ زنده با اسپارک‌لاین. داده‌ی واقعی، کاملاً روان، ساخته‌شده با React.",
-    },
-    tags: ["React", "Data-viz", "Live API", "Charts"],
-    href: `${BASE_PATH}/lumen/`,
-    year: "2026",
-    featured: true,
-    internal: true,
-  },
-  {
-    name: "Probe",
-    title: { en: "Probe — Connection Inspector", fa: "پروب — بازرسِ اتصال" },
-    description: {
-      en: "A live connection & privacy inspector that runs entirely in your browser: public IP + geo from the edge, real WebRTC candidate gathering (local-IP leak detection), live latency probes to global endpoints, the Network Information API and a device fingerprint surface — with a privacy score. All real, nothing stored.",
-      fa: "یک بازرسِ اتصال و حریمِ خصوصی که کاملاً در مرورگرِ تو اجرا می‌شود: آی‌پیِ عمومی و موقعیت از لبه، جمع‌آوریِ واقعیِ کاندیداهای WebRTC (تشخیصِ افشای آی‌پیِ محلی)، سنجشِ زنده‌ی تأخیر تا سرورهای جهانی، Network Information API و سطحِ اثرانگشتِ دستگاه — به‌همراه امتیازِ حریمِ خصوصی. همه واقعی، بدونِ ذخیره‌سازی.",
-    },
-    tags: ["WebRTC", "Networking", "Privacy", "Web APIs"],
-    href: `${BASE_PATH}/probe/`,
-    year: "2026",
-    featured: true,
-    internal: true,
-  },
-  {
     name: "Aperture",
     title: { en: "Aperture — Collaborative Canvas", fa: "آپرچر — بوم مشارکتی" },
     description: {
@@ -325,6 +299,30 @@ export const projects: Project[] = [
     tags: ["React", "Design System", "a11y", "Tokens"],
     href: "https://github.com/im-saleh",
     year: "2025",
+  },
+  {
+    name: "Lumen",
+    title: { en: "Lumen — Live Markets Dashboard", fa: "لومن — داشبورد بازار زنده" },
+    description: {
+      en: "A real-time markets dashboard pulling live data from the CoinGecko API — animated area charts, KPI counters, a market-sentiment gauge, a dominance donut and a sortable table with live sparklines. Real data, buttery-smooth, built in React.",
+      fa: "یک داشبورد بازارِ زنده که داده‌ی واقعی را از API کوین‌گکو می‌گیرد — نمودارهای مساحتیِ متحرک، شمارنده‌های KPI، گیجِ احساسِ بازار، دوناتِ سلطه و جدولِ زنده با اسپارک‌لاین. داده‌ی واقعی، کاملاً روان، ساخته‌شده با React.",
+    },
+    tags: ["React", "Data-viz", "Live API", "Charts"],
+    href: `${BASE_PATH}/lumen/`,
+    year: "2026",
+    internal: true,
+  },
+  {
+    name: "Probe",
+    title: { en: "Probe — Connection Inspector", fa: "پروب — بازرسِ اتصال" },
+    description: {
+      en: "A live connection & privacy inspector that runs entirely in your browser: public IP + geo from the edge, real WebRTC candidate gathering (local-IP leak detection), live latency probes to global endpoints, the Network Information API and a device fingerprint surface — with a privacy score. All real, nothing stored.",
+      fa: "یک بازرسِ اتصال و حریمِ خصوصی که کاملاً در مرورگرِ تو اجرا می‌شود: آی‌پیِ عمومی و موقعیت از لبه، جمع‌آوریِ واقعیِ کاندیداهای WebRTC (تشخیصِ افشای آی‌پیِ محلی)، سنجشِ زنده‌ی تأخیر تا سرورهای جهانی، Network Information API و سطحِ اثرانگشتِ دستگاه — به‌همراه امتیازِ حریمِ خصوصی. همه واقعی، بدونِ ذخیره‌سازی.",
+    },
+    tags: ["WebRTC", "Networking", "Privacy", "Web APIs"],
+    href: `${BASE_PATH}/probe/`,
+    year: "2026",
+    internal: true,
   },
   {
     name: "Vault",

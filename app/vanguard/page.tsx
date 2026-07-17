@@ -166,6 +166,7 @@ export default function VanguardPage() {
   const [selBots, setSelBots] = useState(7);
   const [selDifficulty, setSelDifficulty] = useState<Difficulty>("regular");
   const [selAutoPlay, setSelAutoPlay] = useState(false);
+  const [selUndead, setSelUndead] = useState(false);
   const [selScoreLimit, setSelScoreLimit] = useState(30);
   const [selTimeLimit, setSelTimeLimit] = useState(600);
 
@@ -269,6 +270,7 @@ export default function VanguardPage() {
       timeLimitSec: selTimeLimit,
       autoPlay: selAutoPlay,
       teams: selMode === "tdm",
+      undead: selUndead && selMode !== "tdm",
     });
   };
 
@@ -400,7 +402,7 @@ export default function VanguardPage() {
           <div className="w-full max-w-lg py-16 text-center">
             <div className="mx-auto mb-5 grid h-20 w-20 place-items-center rounded-3xl text-4xl text-black" style={{ background: "linear-gradient(135deg,#fbbf24,#f97316)", boxShadow: "0 14px 40px -10px rgba(249,115,22,0.6)" }}>▲</div>
             <h1 className="display text-5xl text-white sm:text-6xl">Vanguard</h1>
-            <p className="mx-auto mt-3 max-w-md text-white/60">A first-person shooter that lives entirely in your browser — campaign missions, skirmish vs bots, and true peer-to-peer online play with no server in between.</p>
+            <p className="mx-auto mt-3 max-w-md text-white/60">A first-person shooter that lives entirely in your browser — faster movement, detailed weapon models, an undead horde alongside armed soldiers, ten maps, an eight-mission campaign, skirmish vs bots, and true peer-to-peer online play with no server in between.</p>
             <div className="mt-8 grid gap-2.5">
               <button onClick={() => setScreen("campaign")} className="btn btn-accent halo w-full text-base">Campaign — 8 missions</button>
               <button onClick={() => setScreen("skirmish")} className="btn btn-outline w-full border-white/20 text-white">Skirmish vs Bots</button>
@@ -511,6 +513,14 @@ export default function VanguardPage() {
               <span>
                 <b>Auto-play</b>
                 <span className="block text-xs text-white/50">The bot brain pilots your slot too — sit back and watch, or take over any time by moving the mouse.</span>
+              </span>
+            </label>
+
+            <label className="mt-3 flex items-center gap-3 rounded-xl border p-4 text-sm text-white" style={{ borderColor: selMode === "tdm" ? "rgba(255,255,255,0.06)" : "rgba(220,38,38,0.4)", background: selMode === "tdm" ? "rgba(255,255,255,0.03)" : "rgba(220,38,38,0.08)", opacity: selMode === "tdm" ? 0.5 : 1 }}>
+              <input type="checkbox" disabled={selMode === "tdm"} checked={selUndead && selMode !== "tdm"} onChange={(e) => setSelUndead(e.target.checked)} className="h-4 w-4" />
+              <span>
+                <b>🧟 Undead horde</b>
+                <span className="block text-xs text-white/50">Replace the armed soldiers with a relentless swarm of fast, melee zombies. {selMode === "tdm" ? "(Free-for-all only.)" : "Otherwise you face a mix of soldiers and undead."}</span>
               </span>
             </label>
 

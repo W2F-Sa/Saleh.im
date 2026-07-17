@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "https://saleh.im/forge" },
   openGraph: {
     title: "Forge — developer toolbox",
-    description: "16 fast, private developer tools in one place. Everything runs in your browser.",
+    description: "70+ fast, private developer tools in one place. Everything runs in your browser.",
     url: "https://saleh.im/forge",
     type: "website",
   },

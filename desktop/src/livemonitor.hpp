@@ -17,8 +17,16 @@
 //       triggers a re-read; any credential whose key wasn't in the baseline
 //       is emitted via `newLogin` and appended to a rolling session feed.
 //    4. Because some editors/SQLite checkpoint operations replace the file's
-//       inode, the watched path is re-armed defensively after every change.
-//    5. A slow periodic sweep re-runs profile discovery so a browser that is
+//       inode, both the login file AND its containing profile directory are
+//       watched, and the paths are re-armed defensively after every change.
+//    5. Chromium commits new logins into the SQLite write-ahead log (-wal)
+//       first and only merges into the main "Login Data" file on a later
+//       checkpoint — an event QFileSystemWatcher routinely misses. To make
+//       detection reliable regardless of the watcher, a short poll timer
+//       re-scans on a fixed cadence, but only actually re-reads a profile
+//       when its store fingerprint (size + mtime of the file and its WAL)
+//       has changed, so idle profiles cost almost nothing.
+//    6. A slow periodic sweep re-runs profile discovery so a browser that is
 //       installed / signed into for the first time after the monitor starts
 //       is picked up automatically (and silently baselined, never spammed).
 //
@@ -77,14 +85,18 @@ private:
     void refreshWatchList();
     void scanProfile(const Profile& p, bool baselineOnly);
     static QString keyFor(const Credential& c);
+    static qint64 storeFingerprint(const Profile& p);  // size+mtime of the login store (+WAL)
 
     QFileSystemWatcher* watcher_ = nullptr;
     QTimer* debounce_ = nullptr;
     QTimer* rediscoverTimer_ = nullptr;
+    QTimer* pollTimer_ = nullptr;           // guaranteed-progress fallback rescan
     QHash<QString, QSet<QString>> known_;   // profile path -> known credential keys
+    QHash<QString, qint64> fingerprints_;   // profile path -> last-seen store fingerprint
     QVector<LiveEvent> feed_;
     bool running_ = false;
     static constexpr int kMaxFeed = 500;
+    static constexpr int kPollIntervalMs = 2500;  // WAL-safe: catch writes the watcher misses
 };
 
 }  // namespace bimport

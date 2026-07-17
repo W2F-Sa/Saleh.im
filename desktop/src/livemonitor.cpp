@@ -1,5 +1,7 @@
 #include "livemonitor.hpp"
 
+#include <QDateTime>
+#include <QDir>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
 #include <QTimer>
@@ -7,21 +9,34 @@
 namespace bimport {
 
 LiveMonitor::LiveMonitor(QObject* parent) : QObject(parent) {
-    watcher_ = new QFileSystemWatcher(this);
-    connect(watcher_, &QFileSystemWatcher::fileChanged, this, [this](const QString&) {
-        // Debounce: browsers can fsync a Login Data file multiple times in a
-        // burst while committing a transaction — coalesce into one rescan.
-        debounce_->start();
-    });
-
+    // Create the timers first so the watcher callbacks below can safely
+    // reference them (they only fire after construction, but keep it tidy).
     debounce_ = new QTimer(this);
     debounce_->setSingleShot(true);
-    debounce_->setInterval(650);
+    debounce_->setInterval(400);
     connect(debounce_, &QTimer::timeout, this, [this] { refreshWatchList(); });
+
+    watcher_ = new QFileSystemWatcher(this);
+    // A new login can surface either as a change to the store file itself or,
+    // far more often on Chromium, as a change *inside* the profile directory
+    // (the -wal sidecar being written / the file being atomically replaced).
+    // Watch both and coalesce the flood of notifications into one rescan.
+    connect(watcher_, &QFileSystemWatcher::fileChanged, this, [this](const QString&) { debounce_->start(); });
+    connect(watcher_, &QFileSystemWatcher::directoryChanged, this, [this](const QString&) { debounce_->start(); });
 
     rediscoverTimer_ = new QTimer(this);
     rediscoverTimer_->setInterval(30000);  // pick up newly-installed browsers every 30s
     connect(rediscoverTimer_, &QTimer::timeout, this, [this] { refreshWatchList(); });
+
+    // The safety net: Chromium journals new sign-ins into the WAL and only
+    // folds them into "Login Data" on a later checkpoint — a moment the OS
+    // file watcher very often does not report. Polling on a short, fixed
+    // cadence guarantees the login is seen within a couple of seconds even
+    // when no watcher event ever arrives. It is cheap because a profile is
+    // only actually re-read when its store fingerprint has changed.
+    pollTimer_ = new QTimer(this);
+    pollTimer_->setInterval(kPollIntervalMs);
+    connect(pollTimer_, &QTimer::timeout, this, [this] { refreshWatchList(); });
 }
 
 LiveMonitor::~LiveMonitor() = default;
@@ -32,6 +47,7 @@ void LiveMonitor::start() {
     emit statusChanged("Scanning browsers…");
     refreshWatchList();   // first call baselines every newly-discovered profile
     rediscoverTimer_->start();
+    pollTimer_->start();
     emit statusChanged(watcher_->files().isEmpty()
                            ? "No supported browsers with saved logins were found to watch."
                            : QString("Watching %1 login file(s) in real time.").arg(watcher_->files().size()));
@@ -41,9 +57,12 @@ void LiveMonitor::stop() {
     if (!running_) return;
     running_ = false;
     rediscoverTimer_->stop();
+    pollTimer_->stop();
     debounce_->stop();
     const QStringList files = watcher_->files();
     if (!files.isEmpty()) watcher_->removePaths(files);
+    const QStringList dirs = watcher_->directories();
+    if (!dirs.isEmpty()) watcher_->removePaths(dirs);
     emit statusChanged("Live monitor stopped.");
 }
 
@@ -75,35 +94,67 @@ QString LiveMonitor::keyFor(const Credential& c) {
     return c.origin.toLower() + "\x1f" + c.username.toLower() + "\x1f" + methodKey(c.method);
 }
 
+qint64 LiveMonitor::storeFingerprint(const Profile& p) {
+    // A cheap "has anything changed?" signal built from the size + mtime of
+    // the login store and its write-ahead log. Chromium appends a freshly
+    // saved credential to the -wal first, so watching the WAL's growth is the
+    // most reliable way to notice a new sign-in before the next checkpoint.
+    qint64 fp = 0;
+    const QString paths[] = {p.loginData, p.loginData + "-wal"};
+    for (const QString& path : paths) {
+        QFileInfo fi(path);
+        if (!fi.exists()) continue;
+        fp = fp * 1000003 + fi.size();
+        fp = fp * 1000003 + fi.lastModified().toMSecsSinceEpoch();
+    }
+    return fp;
+}
+
 void LiveMonitor::refreshWatchList() {
     const QVector<Profile> profiles = detectProfiles();
 
     // Re-arm the watcher against the current on-disk paths. Chromium/Firefox
     // sometimes replace the file's inode on checkpoint (WAL -> main db merge),
     // which silently drops it from QFileSystemWatcher — so every refresh both
-    // adds new paths and re-adds ones QFileSystemWatcher may have lost.
-    QStringList wanted;
+    // adds new paths and re-adds ones QFileSystemWatcher may have lost. We also
+    // watch each profile *directory*, because an atomic replace or a brand-new
+    // -wal shows up there even when the file-level watch has gone stale.
+    QStringList wantedFiles;
+    QStringList wantedDirs;
     for (const auto& p : profiles) {
-        wanted << p.loginData;
+        wantedFiles << p.loginData;
         for (const char* ext : {"-wal", "-shm"}) {
             const QString sib = p.loginData + ext;
-            if (QFileInfo::exists(sib)) wanted << sib;
+            if (QFileInfo::exists(sib)) wantedFiles << sib;
         }
+        const QString dir = QFileInfo(p.loginData).absolutePath();
+        if (!dir.isEmpty() && !wantedDirs.contains(dir)) wantedDirs << dir;
     }
-    const QStringList current = watcher_->files();
-    QStringList toAdd;
-    for (const QString& w : wanted) if (!current.contains(w)) toAdd << w;
-    if (!toAdd.isEmpty()) watcher_->addPaths(toAdd);
-    // Re-add everything we're still supposed to be watching in case the OS
-    // dropped a path silently after a replace-on-write.
-    if (!wanted.isEmpty()) watcher_->addPaths(wanted);
+
+    const QStringList curFiles = watcher_->files();
+    QStringList addFiles;
+    for (const QString& w : wantedFiles) if (!curFiles.contains(w)) addFiles << w;
+    if (!addFiles.isEmpty()) watcher_->addPaths(addFiles);
+    if (!wantedFiles.isEmpty()) watcher_->addPaths(wantedFiles);
+
+    const QStringList curDirs = watcher_->directories();
+    QStringList addDirs;
+    for (const QString& d : wantedDirs) if (!curDirs.contains(d)) addDirs << d;
+    if (!addDirs.isEmpty()) watcher_->addPaths(addDirs);
 
     for (const auto& p : profiles) {
         // A profile is only ever baselined the *first* time we've seen it —
-        // on every later pass (whether triggered by a file change or the
-        // periodic rediscovery sweep) it gets a real diff scan, so a login
-        // that lands during a rediscovery tick is never silently swallowed.
+        // on every later pass (whether triggered by a file change or a timer
+        // tick) it gets a real diff scan, so a login that lands between events
+        // is never silently swallowed.
         const bool firstTimeEver = !known_.contains(p.path);
+
+        // Fast path for the frequent poll: if the on-disk store hasn't changed
+        // since we last read this profile, skip the copy + decrypt entirely.
+        const qint64 fp = storeFingerprint(p);
+        if (!firstTimeEver && fp != 0 && fingerprints_.value(p.path, -1) == fp) continue;
+        fingerprints_[p.path] = fp;
+
         scanProfile(p, firstTimeEver);
     }
 }

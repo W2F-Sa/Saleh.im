@@ -18,7 +18,7 @@
 // ============================================================================
 
 import { AudioEngine } from "./audio";
-import { AiActor, BotMemory, DifficultyProfile, botName, difficultyById, newBotMemory, think } from "./ai";
+import { AiActor, BotMemory, DifficultyProfile, bfsNextStep, botName, difficultyById, newBotMemory, think } from "./ai";
 import { GameMap, ItemSpawn, Vec2, isWall, mapById, materialById, pickSpawn } from "./maps";
 import { PerkDef, WeaponDef, damageAtRange, perkById, weaponById } from "./weapons";
 
@@ -39,7 +39,12 @@ export interface MatchConfig {
   missionId?: string;   // campaign only
   autoPlay: boolean;    // human slot is bot-piloted
   teams: boolean;       // whether actors are split red/blue
+  undead?: boolean;     // when true the entire enemy force is the undead horde
 }
+
+// Enemies come in two flavours: armed human soldiers (ranged) and the undead
+// horde (fast melee rushers). The mix per match is decided at spawn time.
+export type EnemyKind = "human" | "zombie";
 
 export interface ActorSnapshot {
   id: number;
@@ -140,6 +145,10 @@ interface Actor {
   recoilKick: number;
   lastDamager: number | null;
   radius: number;
+  kind: EnemyKind;        // "human" soldier or "zombie" rusher
+  attackCooldown: number; // zombie melee swing timer
+  lungeT: number;         // 0..1 zombie attack-lunge animation
+  gaitPhase: number;      // sprite limb-animation phase
 }
 
 interface Projectile {
@@ -220,15 +229,28 @@ export function missionById(id: string): MissionDef {
 // ---------------------------------------------------------------------------
 
 const FOV = Math.PI / 2.7;
-const MOVE_SPEED = 3.1;
-const SPRINT_MULT = 1.55;
-const STRAFE_MULT = 0.92;
+// v2 — a much snappier, more aggressive base tempo than the original build.
+const MOVE_SPEED = 4.6;
+const SPRINT_MULT = 1.7;
+const STRAFE_MULT = 0.94;
 const PLAYER_RADIUS = 0.22;
-const RESPAWN_TIME = 3.5;
+const RESPAWN_TIME = 3.0;
 const COUNTDOWN_TIME = 3;
-const PICKUP_RESPAWN = 18;
-const MAX_RENDER_DIST = 26;
+const PICKUP_RESPAWN = 16;
+const MAX_RENDER_DIST = 30;
 const ARMOR_ABSORB = 0.5; // armor absorbs 50% of incoming damage until depleted
+
+// Undead horde tuning.
+const ZOMBIE_HEALTH = 70;
+const ZOMBIE_SPEED_MULT = 1.12;   // relative to MOVE_SPEED — they are relentless
+const ZOMBIE_MELEE_RANGE = 1.15;
+const ZOMBIE_MELEE_DAMAGE = 26;
+const ZOMBIE_MELEE_COOLDOWN = 0.9;
+
+const ZOMBIE_NAMES = [
+  "Walker", "Ghoul", "Rotter", "Husk", "Crawler", "Shambler", "Revenant", "Lurker",
+  "Feral", "Gnasher", "Stalker", "Wretch", "Devourer", "Creeper", "Maw", "Cadaver",
+];
 
 // ---------------------------------------------------------------------------
 //  Utility
@@ -365,10 +387,14 @@ export class VanguardEngine {
 
   // -- setup ------------------------------------------------------------
 
-  private makeActor(opts: { name: string; team: number; isBot: boolean; isLocal: boolean; isRemote: boolean; id?: number }): Actor {
+  private makeActor(opts: { name: string; team: number; isBot: boolean; isLocal: boolean; isRemote: boolean; id?: number; kind?: EnemyKind }): Actor {
     const spawn = pickSpawn(this.map, this.actors.map((a) => ({ x: a.x, y: a.y })));
-    const primary = opts.isBot ? this.pickBotWeapon() : this.config.mode === "campaign" ? "m4" : "m4";
+    const kind: EnemyKind = opts.kind ?? "human";
+    const isZombie = kind === "zombie";
+    // Zombies fight with their claws (the melee slot); humans carry a rifle.
+    const primary = isZombie ? "knife" : opts.isBot ? this.pickBotWeapon() : "m4";
     const secondary = "sidearm";
+    const maxHealth = isZombie ? ZOMBIE_HEALTH : 100;
     return {
       id: opts.id ?? this.nextActorId++,
       name: opts.name,
@@ -378,8 +404,8 @@ export class VanguardEngine {
       angle: rand(-Math.PI, Math.PI),
       velX: 0,
       velY: 0,
-      health: 100,
-      maxHealth: 100,
+      health: maxHealth,
+      maxHealth,
       armor: 0,
       maxArmor: 100,
       alive: true,
@@ -405,6 +431,10 @@ export class VanguardEngine {
       recoilKick: 0,
       lastDamager: null,
       radius: PLAYER_RADIUS,
+      kind,
+      attackCooldown: 0,
+      lungeT: 0,
+      gaitPhase: Math.random() * Math.PI * 2,
     };
   }
 
@@ -414,9 +444,14 @@ export class VanguardEngine {
   }
 
   private spawnBotsAndPickups() {
+    let zi = 0;
     for (let i = 0; i < this.config.botCount; i++) {
-      const team = this.config.teams ? 1 + (i % 2 === 0 ? 0 : 1) : 1;
-      const bot = this.makeActor({ name: botName(i), team: this.config.teams ? (i % 2) : 1, isBot: true, isLocal: false, isRemote: false });
+      const team = this.config.teams ? i % 2 : 1;
+      // Team modes stay human-vs-human; free-for-all / campaign fields a mix of
+      // armed soldiers and the undead horde (all of them, if "undead" is set).
+      const isZombie = !this.config.teams && (this.config.undead || Math.random() < 0.45);
+      const name = isZombie ? ZOMBIE_NAMES[zi++ % ZOMBIE_NAMES.length] : botName(i);
+      const bot = this.makeActor({ name, team, isBot: true, isLocal: false, isRemote: false, kind: isZombie ? "zombie" : "human" });
       this.actors.push(bot);
     }
     this.pickups = this.map.items.map((it) => ({ ...it, taken: false, respawnTimer: 0 }));
@@ -700,6 +735,10 @@ export class VanguardEngine {
   }
 
   private updateBot(a: Actor, dt: number) {
+    if (a.kind === "zombie") {
+      this.updateZombie(a, dt);
+      return;
+    }
     const profile = difficultyById(this.config.difficulty);
     const w = weaponById(a.weaponId);
     const aiActors: AiActor[] = this.actors
@@ -732,6 +771,54 @@ export class VanguardEngine {
 
     if (intent.wantsReload) this.reloadActor(a);
     if (intent.wantsFire && a.fireCooldown <= 0 && a.magAmmo[a.weaponId] > 0) this.fireWeapon(a);
+  }
+
+  // Undead brain: no guns, no cover, no restraint — pathfind straight to the
+  // nearest living enemy and claw at it on a short cooldown.
+  private updateZombie(a: Actor, dt: number) {
+    if (a.attackCooldown > 0) a.attackCooldown -= dt;
+    if (a.lungeT > 0) a.lungeT = Math.max(0, a.lungeT - dt * 3);
+
+    let target: Actor | null = null;
+    let best = Infinity;
+    for (const o of this.actors) {
+      if (o === a || !o.alive || o.team === a.team) continue;
+      const d = Math.hypot(o.x - a.x, o.y - a.y);
+      if (d < best) { best = d; target = o; }
+    }
+    if (!target) {
+      a.velX = 0;
+      a.velY = 0;
+      return;
+    }
+
+    const desired = Math.atan2(target.y - a.y, target.x - a.x);
+    a.angle = normalizeAngle(a.angle + normalizeAngle(desired - a.angle) * 0.2);
+
+    if (best > ZOMBIE_MELEE_RANGE * 0.85) {
+      a.mem.repathTimer -= dt;
+      if (a.mem.repathTimer <= 0 || !a.mem.path) {
+        a.mem.path = bfsNextStep(this.map, { x: a.x, y: a.y }, { x: target.x, y: target.y });
+        a.mem.repathTimer = 0.3;
+      }
+      const step = a.mem.path || { x: target.x, y: target.y };
+      const moveAng = Math.atan2(step.y - a.y, step.x - a.x);
+      const spd = MOVE_SPEED * ZOMBIE_SPEED_MULT;
+      a.velX = Math.cos(moveAng) * spd;
+      a.velY = Math.sin(moveAng) * spd;
+      a.gaitPhase += dt * 11;
+    } else {
+      a.velX = 0;
+      a.velY = 0;
+      if (a.attackCooldown <= 0) {
+        a.attackCooldown = ZOMBIE_MELEE_COOLDOWN;
+        a.lungeT = 1;
+        this.applyDamage(target, ZOMBIE_MELEE_DAMAGE, a, false, "Claws");
+        this.spawnBlood(target.x, target.y);
+        if (target.isLocal) this.audio.play("hurt", 0.95);
+        this.audio.play("knife", 0.35);
+      }
+    }
   }
 
   private integrateActor(a: Actor, dt: number) {
@@ -1303,11 +1390,17 @@ export class VanguardEngine {
     const bobY = Math.sin(a.bobPhase) * (Math.hypot(a.velX, a.velY) > 0.1 ? 3.5 : 0.6);
     const horizon = h / 2 + bobY;
 
-    // sky/ceiling
-    ctx.fillStyle = this.map.ceilingColor;
+    // sky/ceiling — a vertical gradient adds real depth vs the old flat fill.
+    const ceil = ctx.createLinearGradient(0, 0, 0, horizon);
+    ceil.addColorStop(0, shadeColor(this.map.ceilingColor, 1.18));
+    ceil.addColorStop(1, shadeColor(this.map.ceilingColor, 0.66));
+    ctx.fillStyle = ceil;
     ctx.fillRect(0, 0, w, horizon);
-    // floor
-    ctx.fillStyle = this.map.floorColor;
+    // floor — brightest underfoot, fading toward the fogged horizon.
+    const floor = ctx.createLinearGradient(0, horizon, 0, h);
+    floor.addColorStop(0, shadeColor(this.map.floorColor, 0.6));
+    floor.addColorStop(1, shadeColor(this.map.floorColor, 1.12));
+    ctx.fillStyle = floor;
     ctx.fillRect(0, horizon, w, h - horizon);
 
     this.castWalls(ctx, a, w, horizon, h);
@@ -1321,6 +1414,9 @@ export class VanguardEngine {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
     ctx.globalAlpha = 1;
+
+    // First-person weapon viewmodel (hidden while scoped in).
+    if (a.alive && !a.ads) this.drawViewModel(ctx, a, w, h);
 
     if (a.ads) {
       const wpn = weaponById(a.weaponId);
@@ -1428,15 +1524,17 @@ export class VanguardEngine {
   // camera-facing billboards using the same perspective math as the walls,
   // depth-tested per-column against the z-buffer produced above.
   private drawSprites(ctx: CanvasRenderingContext2D, a: Actor, w: number, horizon: number, h: number) {
-    type Sprite = { x: number; y: number; height: number; width: number; color: string; kind: string; glow?: string; alpha?: number; z?: number };
+    type Sprite = { x: number; y: number; height: number; width: number; color: string; kind: string; glow?: string; alpha?: number; z?: number; ref?: Actor };
     const sprites: Sprite[] = [];
 
     for (const other of this.actors) {
       if (other === a || !other.alive) continue;
+      const zombie = other.kind === "zombie";
       sprites.push({
-        x: other.x, y: other.y, height: 1.7, width: 0.9,
-        color: other.hurtFlash > 0 ? "#ffffff" : other.team === 0 ? "#7dd3fc" : other.team === 1 ? "#fca5a5" : "#e2e8f0",
-        kind: "actor", glow: other.team === 0 ? "#38bdf8" : "#f87171",
+        x: other.x, y: other.y, height: zombie ? 1.62 : 1.74, width: 0.98,
+        color: "#000", kind: "actor",
+        glow: zombie ? "#7f1d1d" : other.team === 0 ? "#38bdf8" : "#f87171",
+        ref: other,
       });
     }
     for (const pk of this.pickups) {
@@ -1477,6 +1575,11 @@ export class VanguardEngine {
       }
       if (sampleCount > 0 && visibleCols === 0) continue;
 
+      if (s.kind === "actor" && s.ref) {
+        this.drawActorSprite(ctx, s.ref, screenX, top, spriteW, spriteH, s.glow || "#f87171");
+        continue;
+      }
+
       ctx.save();
       ctx.globalAlpha = s.alpha ?? 1;
       if (s.glow) {
@@ -1484,15 +1587,7 @@ export class VanguardEngine {
         ctx.shadowBlur = 12;
       }
       ctx.fillStyle = s.color;
-      if (s.kind === "actor") {
-        // simple humanoid silhouette: body rect + head circle so bots read
-        // clearly at a glance even at this resolution.
-        const bw = spriteW * 0.7;
-        ctx.fillRect(screenX - bw / 2, top + spriteH * 0.22, bw, spriteH * 0.78);
-        ctx.beginPath();
-        ctx.arc(screenX, top + spriteH * 0.12, spriteH * 0.13, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (s.kind === "particle") {
+      if (s.kind === "particle") {
         ctx.beginPath();
         ctx.arc(screenX, top, Math.max(1, spriteW / 2), 0, Math.PI * 2);
         ctx.fill();
@@ -1517,6 +1612,320 @@ export class VanguardEngine {
       ctx.fill();
       ctx.restore();
     }
+  }
+
+  // Draw a single enemy as an animated, shaded humanoid — an armed soldier or
+  // a shambling zombie — with a ground shadow and a floating health bar. Far
+  // richer than the old rectangle-plus-circle so the world reads like a game.
+  private drawActorSprite(ctx: CanvasRenderingContext2D, actor: Actor, cx: number, top: number, sw: number, sh: number, glow: string) {
+    const zombie = actor.kind === "zombie";
+    const moving = Math.hypot(actor.velX, actor.velY) > 0.1;
+    const phase = zombie ? actor.gaitPhase : actor.bobPhase;
+    const swing = moving ? Math.sin(phase) : 0;
+    const feetY = top + sh;
+    const hurt = actor.hurtFlash > 0;
+
+    ctx.save();
+
+    // ground shadow
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = "#000";
+    ctx.beginPath();
+    ctx.ellipse(cx, feetY, sw * 0.55, Math.max(2, sh * 0.05), 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // soft rim glow behind the body
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.shadowColor = glow;
+    ctx.shadowBlur = Math.min(22, sh * 0.18);
+    ctx.fillStyle = glow;
+    ctx.fillRect(cx - sw * 0.28, top + sh * 0.2, sw * 0.56, sh * 0.6);
+    ctx.restore();
+
+    const skin = hurt ? "#ffffff" : zombie ? "#8fa663" : "#c6a06e";
+    const cloth = hurt ? "#ffffff" : zombie ? "#3f5a34" : actor.team === 0 ? "#2f5fd0" : "#b0322c";
+    const clothDark = shadeColor(cloth, 0.6);
+    const gear = zombie ? "#2b3a24" : "#20242b";
+
+    const legTop = top + sh * 0.6;
+    const legLen = sh * 0.4;
+    const legW = sw * 0.16;
+    const torsoW = sw * (zombie ? 0.42 : 0.5);
+    const torsoTop = top + sh * (zombie ? 0.28 : 0.24);
+    const torsoBot = legTop + 1;
+    const headR = sh * (zombie ? 0.085 : 0.09);
+    // Zombies hunch forward, so the head leans off-centre and sits lower.
+    const headCX = cx + (zombie ? sw * 0.1 * (1 + 0.2 * Math.sin(phase * 0.7)) : 0);
+    const headCY = top + sh * (zombie ? 0.2 : 0.13);
+
+    // legs (animated stride)
+    ctx.fillStyle = clothDark;
+    const legOff = swing * sw * 0.14;
+    ctx.fillRect(cx - torsoW * 0.42 - legW / 2 + legOff, legTop, legW, legLen);
+    ctx.fillRect(cx + torsoW * 0.42 - legW / 2 - legOff, legTop, legW, legLen);
+
+    // torso
+    ctx.fillStyle = cloth;
+    ctx.fillRect(cx - torsoW / 2, torsoTop, torsoW, torsoBot - torsoTop);
+    // chest rig / tatters
+    ctx.fillStyle = gear;
+    if (zombie) {
+      ctx.globalAlpha = 0.8;
+      for (let i = 0; i < 3; i++) ctx.fillRect(cx - torsoW / 2 + torsoW * (0.15 + i * 0.3), torsoTop + sh * 0.05, torsoW * 0.08, (torsoBot - torsoTop) * (0.5 + 0.2 * i));
+      ctx.globalAlpha = 1;
+    } else {
+      ctx.fillRect(cx - torsoW / 2, torsoTop + sh * 0.1, torsoW, sh * 0.06);
+    }
+
+    // arms
+    const armW = sw * 0.13;
+    const armLen = sh * (zombie ? 0.34 : 0.3);
+    ctx.fillStyle = cloth;
+    if (zombie) {
+      // outstretched, reaching toward the viewer, with a hungry sway
+      const reach = sw * 0.34 + Math.sin(phase) * sw * 0.05;
+      ctx.save();
+      ctx.translate(cx, torsoTop + sh * 0.05);
+      ctx.rotate(0.5);
+      ctx.fillRect(-armW / 2, 0, armW, armLen);
+      ctx.restore();
+      ctx.save();
+      ctx.translate(cx, torsoTop + sh * 0.02);
+      ctx.rotate(-0.35);
+      ctx.fillRect(-armW / 2, 0, armW, armLen);
+      ctx.restore();
+      // reaching hands
+      ctx.fillStyle = skin;
+      ctx.beginPath();
+      ctx.arc(cx - reach * 0.4, torsoTop + sh * 0.28, armW * 0.6, 0, Math.PI * 2);
+      ctx.arc(cx + reach * 0.5, torsoTop + sh * 0.24, armW * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillRect(cx - torsoW / 2 - armW * 0.6, torsoTop + sh * 0.02, armW, armLen);
+      ctx.fillRect(cx + torsoW / 2 - armW * 0.4, torsoTop + sh * 0.02, armW, armLen);
+      // a slung rifle across the chest
+      ctx.fillStyle = "#15181d";
+      ctx.save();
+      ctx.translate(cx, torsoTop + sh * 0.12);
+      ctx.rotate(-0.35);
+      ctx.fillRect(-sw * 0.05, -sh * 0.02, sw * 0.5, sh * 0.05);
+      ctx.restore();
+    }
+
+    // head
+    ctx.fillStyle = skin;
+    ctx.beginPath();
+    ctx.arc(headCX, headCY, headR, 0, Math.PI * 2);
+    ctx.fill();
+    if (zombie) {
+      // glowing eyes
+      ctx.fillStyle = "#d9f871";
+      ctx.shadowColor = "#eaff6b";
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(headCX - headR * 0.35, headCY - headR * 0.1, headR * 0.2, 0, Math.PI * 2);
+      ctx.arc(headCX + headR * 0.35, headCY - headR * 0.1, headR * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    } else {
+      // helmet
+      ctx.fillStyle = shadeColor(cloth, 0.5);
+      ctx.beginPath();
+      ctx.arc(headCX, headCY - headR * 0.2, headR * 1.12, Math.PI, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // health bar (only when hurt)
+    const hp = clamp(actor.health / actor.maxHealth, 0, 1);
+    if (hp < 0.999) {
+      const bw = sw * 0.72;
+      const bh = Math.max(2.5, sh * 0.022);
+      const bx = cx - bw / 2;
+      const by = top - bh * 2.4;
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+      ctx.fillStyle = hp > 0.5 ? "#4ade80" : hp > 0.25 ? "#facc15" : "#f87171";
+      ctx.fillRect(bx, by, bw * hp, bh);
+    }
+
+    ctx.restore();
+  }
+
+  // Stylised first-person weapon viewmodel — a procedural gun that sways with
+  // movement, dips during reloads and kicks with recoil. Distinct silhouette
+  // per category so the equipped weapon is instantly readable.
+  private drawViewModel(ctx: CanvasRenderingContext2D, a: Actor, w: number, h: number) {
+    const wpn = weaponById(a.weaponId);
+    const moving = Math.hypot(a.velX, a.velY) > 0.15;
+    const bobY = Math.sin(a.bobPhase) * (moving ? 9 : 3);
+    const bobX = Math.cos(a.bobPhase * 0.5) * (moving ? 8 : 2);
+    const recoil = clamp(a.recoilKick, 0, 1);
+    const reloadTime = wpn.reloadTime || 1;
+    const reloadDip = a.reloadTimer > 0 ? Math.sin(clamp(1 - a.reloadTimer / reloadTime, 0, 1) * Math.PI) * 90 : 0;
+
+    const scale = Math.min(w, h) / 560;
+    ctx.save();
+    ctx.translate(w * 0.5 + bobX, h + bobY + recoil * 26 + reloadDip);
+    ctx.scale(scale, scale);
+    ctx.rotate(-0.06 + recoil * 0.05);
+
+    const body = wpn.color;
+    const dark = shadeColor(body, 0.5);
+    const metal = "#23262c";
+    const hands = "#c6a06e";
+    const rr = (x: number, y: number, ww: number, hh: number, r = 6) => {
+      ctx.beginPath();
+      if (typeof (ctx as CanvasRenderingContext2D & { roundRect?: unknown }).roundRect === "function") {
+        (ctx as CanvasRenderingContext2D & { roundRect: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect(x, y, ww, hh, r);
+      } else {
+        ctx.rect(x, y, ww, hh);
+      }
+      ctx.fill();
+    };
+
+    // muzzle flash first (behind the barrel), when just fired
+    if (recoil > 0.12) {
+      const mx = -150;
+      const my = -150;
+      ctx.save();
+      ctx.globalAlpha = clamp(recoil * 1.4, 0, 1);
+      const g = ctx.createRadialGradient(mx, my, 2, mx, my, 70);
+      g.addColorStop(0, "#fff7d6");
+      g.addColorStop(0.5, "#ffb020");
+      g.addColorStop(1, "transparent");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(mx, my, 70, 0, Math.PI * 2);
+      ctx.fill();
+      // star spikes
+      ctx.strokeStyle = "#fff2c0";
+      ctx.lineWidth = 6;
+      for (let i = 0; i < 4; i++) {
+        const ang = (i * Math.PI) / 2 + recoil;
+        ctx.beginPath();
+        ctx.moveTo(mx, my);
+        ctx.lineTo(mx + Math.cos(ang) * 46, my + Math.sin(ang) * 46);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    switch (wpn.category) {
+      case "melee": {
+        ctx.fillStyle = hands;
+        rr(60, -120, 46, 90, 14); // fist
+        ctx.fillStyle = "#3a3f47";
+        rr(74, -170, 18, 60, 6); // handle
+        ctx.fillStyle = "#d7dde6";
+        ctx.beginPath();
+        ctx.moveTo(74, -168);
+        ctx.lineTo(92, -168);
+        ctx.lineTo(120, -250);
+        ctx.lineTo(86, -180);
+        ctx.closePath();
+        ctx.fill();
+        break;
+      }
+      case "launcher": {
+        ctx.fillStyle = dark;
+        rr(-180, -180, 360, 46, 20); // big tube
+        ctx.fillStyle = body;
+        rr(120, -186, 70, 58, 16); // warhead
+        ctx.fillStyle = metal;
+        rr(-40, -140, 60, 70, 8); // grip housing
+        ctx.fillStyle = hands;
+        rr(-10, -110, 44, 84, 14);
+        rr(120, -120, 40, 80, 14);
+        break;
+      }
+      case "sniper": {
+        ctx.fillStyle = metal;
+        rr(-190, -150, 380, 26, 8); // long barrel
+        ctx.fillStyle = body;
+        rr(-10, -168, 180, 52, 12); // receiver
+        ctx.fillStyle = dark;
+        rr(20, -210, 120, 26, 12); // scope tube
+        ctx.fillStyle = "#0b0d10";
+        rr(120, -214, 26, 34, 6); // scope eyepiece
+        ctx.fillStyle = dark;
+        rr(150, -120, 40, 120, 10); // stock/grip
+        ctx.fillStyle = body;
+        rr(30, -110, 26, 70, 6); // mag
+        ctx.fillStyle = hands;
+        rr(150, -110, 44, 90, 14);
+        rr(-20, -108, 42, 80, 14);
+        break;
+      }
+      case "shotgun": {
+        ctx.fillStyle = dark;
+        rr(-170, -158, 320, 34, 12); // barrel
+        ctx.fillStyle = "#6b4a2a";
+        rr(120, -150, 90, 34, 10); // wood stock
+        rr(-40, -120, 100, 26, 8); // pump
+        ctx.fillStyle = body;
+        rr(30, -160, 120, 46, 12); // receiver
+        ctx.fillStyle = hands;
+        rr(-20, -112, 44, 78, 14); // pump hand
+        rr(150, -118, 44, 86, 14); // trigger hand
+        break;
+      }
+      case "lmg": {
+        ctx.fillStyle = metal;
+        rr(-190, -160, 360, 30, 10); // barrel
+        ctx.fillStyle = body;
+        rr(0, -178, 190, 64, 14); // big receiver
+        ctx.fillStyle = dark;
+        rr(30, -118, 120, 70, 14); // ammo box
+        rr(160, -130, 46, 110, 10); // stock
+        ctx.fillStyle = hands;
+        rr(150, -120, 46, 92, 14);
+        rr(-30, -116, 44, 82, 14);
+        break;
+      }
+      case "smg": {
+        ctx.fillStyle = metal;
+        rr(-120, -150, 220, 24, 8); // short barrel
+        ctx.fillStyle = body;
+        rr(0, -168, 150, 50, 12); // receiver
+        ctx.fillStyle = dark;
+        rr(40, -120, 34, 96, 8); // long mag
+        rr(140, -130, 34, 92, 8); // folding stock
+        ctx.fillStyle = hands;
+        rr(120, -120, 44, 86, 14);
+        rr(20, -116, 40, 78, 14);
+        break;
+      }
+      case "pistol": {
+        ctx.fillStyle = body;
+        rr(20, -160, 150, 40, 10); // slide
+        ctx.fillStyle = dark;
+        rr(40, -128, 40, 84, 8); // grip
+        rr(48, -120, 24, 70, 6); // mag
+        ctx.fillStyle = hands;
+        rr(30, -110, 48, 84, 16);
+        break;
+      }
+      default: {
+        // rifle
+        ctx.fillStyle = metal;
+        rr(-180, -152, 300, 24, 8); // barrel
+        ctx.fillStyle = body;
+        rr(-10, -170, 180, 52, 12); // receiver
+        ctx.fillStyle = dark;
+        rr(150, -124, 46, 116, 10); // stock
+        rr(30, -118, 32, 96, 8); // curved mag
+        ctx.fillStyle = "#0b0d10";
+        rr(40, -200, 70, 20, 8); // rail sight
+        ctx.fillStyle = hands;
+        rr(150, -114, 46, 90, 14); // trigger hand
+        rr(-20, -110, 44, 82, 14); // fore hand
+        break;
+      }
+    }
+
+    ctx.restore();
   }
 }
 
