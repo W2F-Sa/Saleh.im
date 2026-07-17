@@ -46,11 +46,11 @@ if [ "$INSTALL_DEPS" = true ]; then
   log "Installing build dependencies"
   if command -v apt-get >/dev/null 2>&1; then
     sudo apt-get update
-    sudo apt-get install -y build-essential cmake qt6-base-dev libsodium-dev
+    sudo apt-get install -y build-essential cmake qt6-base-dev libsodium-dev libssl-dev libqt6sql6-sqlite libsecret-tools
   elif command -v dnf >/dev/null 2>&1; then
-    sudo dnf install -y gcc-c++ cmake qt6-qtbase-devel libsodium-devel rpm-build
+    sudo dnf install -y gcc-c++ cmake qt6-qtbase-devel libsodium-devel openssl-devel rpm-build libsecret
   elif command -v pacman >/dev/null 2>&1; then
-    sudo pacman -S --needed --noconfirm base-devel cmake qt6-base libsodium
+    sudo pacman -S --needed --noconfirm base-devel cmake qt6-base libsodium openssl libsecret
   else
     die "Unsupported package manager — install cmake, a C++ compiler, Qt6 base and libsodium manually."
   fi

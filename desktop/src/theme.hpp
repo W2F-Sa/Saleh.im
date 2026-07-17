@@ -123,6 +123,13 @@ inline QString rgba(const QString& hex, double a) {
     return QString("rgba(%1,%2,%3,%4)").arg(c.red()).arg(c.green()).arg(c.blue()).arg(a, 0, 'f', 3);
 }
 
+// Nudge a hex colour lighter (toward white) — used to fake a glassy top sheen.
+inline QString lighten(const QString& hex, int amt) {
+    QColor c(hex);
+    if (!c.isValid()) return hex;
+    return QColor(qMin(255, c.red() + amt), qMin(255, c.green() + amt), qMin(255, c.blue() + amt)).name();
+}
+
 // ---------------------------------------------------------------------------
 //  Stylesheet builder — renders one Palette into a full Qt Style Sheet.
 // ---------------------------------------------------------------------------
@@ -135,19 +142,22 @@ inline QString qssFor(const Palette& p) {
     const QString accSoft2 = rgba(acc, 0.10);
     const QString accSoft3 = rgba(acc, 0.20);
     const QString topHi = p.dark ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.55)";
+    // soft vertical "glass" gradients — a lighter top edge fading into the base
+    const QString cardBg = QString("qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 %1, stop:1 %2)").arg(lighten(bg2, p.dark ? 9 : 5), bg2);
+    const QString btnBg = QString("qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 %1, stop:1 %2)").arg(lighten(bg3, p.dark ? 8 : 4), bg3);
 
     return QString(R"QSS(
 * { outline: none; }
 QWidget { background: %BG%; color: %FG%; font-size: 14px;
   font-family: "Inter","Ubuntu","Noto Sans","Segoe UI",sans-serif; }
 QMainWindow, QDialog { background: %BG%; }
-QToolTip { background: %BG2%; color: %FG%; border: 1px solid %LINE2%; padding: 5px 9px; border-radius: 8px; }
+QToolTip { background: %BG2%; color: %FG%; border: 1px solid %LINE2%; padding: 6px 10px; border-radius: 10px; }
 
 #sidebar { background: %BG2%; border-right: 1px solid %LINE%; }
 #detail  { background: %BG2%; border-left: 1px solid %LINE%; }
 #sidebarInner, #detailInner { background: %BG2%; }
 #topbar  { background: %BG%; }
-#card    { background: %BG2%; border: 1px solid %LINE%; border-radius: 16px; }
+#card    { background: %CARDBG%; border: 1px solid %LINE%; border-radius: 18px; }
 #hero    { background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 %ACCSOFT%, stop:1 transparent);
            border: 1px solid %LINE%; border-radius: 18px; }
 
@@ -163,19 +173,19 @@ QLabel#pill { background: %BG3%; border: 1px solid %LINE%; border-radius: 999px;
 QLabel#accentPill { background: %ACCSOFT%; border: 1px solid %ACC%; border-radius: 999px; padding: 4px 12px; color: %ACC%; font-size: 12px; font-weight: 700; }
 
 QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QSpinBox, QDoubleSpinBox {
-  background: %BG3%; color: %FG%; border: 1px solid %LINE2%; border-radius: 11px;
-  padding: 9px 13px; selection-background-color: %ACC%; selection-color: %ONACC%; }
+  background: %BG3%; color: %FG%; border: 1px solid %LINE2%; border-radius: 13px;
+  padding: 10px 14px; selection-background-color: %ACC%; selection-color: %ONACC%; }
 QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus { border: 1px solid %ACC%; }
 QLineEdit:hover, QComboBox:hover, QSpinBox:hover { border: 1px solid %LINE2%; }
 QLineEdit:disabled, QComboBox:disabled { color: %FG2%; }
 QComboBox::drop-down { border: none; width: 26px; }
 QComboBox::down-arrow { image: none; border-left: 4px solid transparent; border-right: 4px solid transparent;
   border-top: 5px solid %FG2%; margin-right: 10px; }
-QComboBox QAbstractItemView { background: %BG2%; border: 1px solid %LINE2%; border-radius: 10px;
-  selection-background-color: %ACC%; selection-color: %ONACC%; padding: 4px; }
+QComboBox QAbstractItemView { background: %BG2%; border: 1px solid %LINE2%; border-radius: 12px;
+  selection-background-color: %ACC%; selection-color: %ONACC%; padding: 5px; }
 QSpinBox::up-button, QSpinBox::down-button, QDoubleSpinBox::up-button, QDoubleSpinBox::down-button { width: 0; border: none; }
 
-QPushButton { background: %BG3%; color: %FG%; border: 1px solid %LINE2%; border-radius: 11px; padding: 9px 15px; font-weight: 500; }
+QPushButton { background: %BTNBG%; color: %FG%; border: 1px solid %LINE2%; border-radius: 13px; padding: 10px 16px; font-weight: 500; }
 QPushButton:hover { border-color: %ACC%; color: %ACC%; }
 QPushButton:pressed { background: %LINE%; }
 QPushButton:disabled { color: %FG2%; border-color: %LINE%; }
@@ -191,7 +201,7 @@ QPushButton#danger:hover { color: #ff6b6b; border-color: #ff6b6b; background: rg
 QPushButton#chip { background: %BG3%; border: 1px solid %LINE%; border-radius: 999px; padding: 5px 13px; color: %FG2%; font-size: 12px; }
 QPushButton#chip:hover { border-color: %ACC%; color: %ACC%; }
 QPushButton#chip:checked { background: %ACCSOFT%; border-color: %ACC%; color: %ACC%; font-weight: 700; }
-QPushButton#nav { background: transparent; border: none; text-align: left; padding: 10px 12px; border-radius: 11px; color: %FG2%; }
+QPushButton#nav { background: transparent; border: none; text-align: left; padding: 10px 12px; border-radius: 13px; color: %FG2%; }
 QPushButton#nav:hover { background: %BG3%; color: %FG%; }
 QPushButton#nav:checked { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 %ACCSOFT%, stop:1 transparent); color: %ACC%; font-weight: 700; border-left: 2px solid %ACC%; }
 QPushButton#swatch { border-radius: 12px; min-height: 54px; }
@@ -201,7 +211,7 @@ QToolButton { background: transparent; border: none; border-radius: 9px; padding
 QToolButton:hover { background: %BG3%; color: %ACC%; }
 
 QListWidget, QTreeWidget, QTableWidget { background: transparent; border: none; }
-QListWidget::item { background: %BG2%; border: 1px solid %LINE%; border-radius: 14px; padding: 11px; margin: 3px 1px; }
+QListWidget::item { background: %CARDBG%; border: 1px solid %LINE%; border-radius: 16px; padding: 12px; margin: 3px 1px; }
 QListWidget::item:hover { border-color: %LINE2%; }
 QListWidget::item:selected { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 %ACCSOFT%, stop:1 %BG2%);
   border: 1px solid %ACC%; color: %FG%; }
@@ -223,7 +233,7 @@ QTabBar::tab { background: transparent; color: %FG2%; padding: 9px 18px; margin-
 QTabBar::tab:hover { color: %FG%; }
 QTabBar::tab:selected { color: %ACC%; background: %BG2%; border-bottom: 2px solid %ACC%; }
 
-QGroupBox { border: 1px solid %LINE%; border-radius: 14px; margin-top: 16px; padding: 14px 12px 12px 12px; background: %BG2%; }
+QGroupBox { border: 1px solid %LINE%; border-radius: 18px; margin-top: 16px; padding: 16px 14px 14px 14px; background: %CARDBG%; }
 QGroupBox::title { subcontrol-origin: margin; left: 14px; padding: 2px 8px; color: %FG2%;
   font-size: 10px; font-weight: 700; letter-spacing: 1.2px; }
 
@@ -248,7 +258,7 @@ QSlider::handle:horizontal { width: 18px; height: 18px; margin: -6px 0; border-r
   background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 %ACC%, stop:1 %ACC2%); }
 QSlider::sub-page:horizontal { background: %ACC%; border-radius: 3px; }
 
-QMenu { background: %BG2%; border: 1px solid %LINE2%; border-radius: 10px; padding: 5px; }
+QMenu { background: %BG2%; border: 1px solid %LINE2%; border-radius: 14px; padding: 6px; }
 QMenu::item { padding: 7px 22px; border-radius: 7px; }
 QMenu::item:selected { background: %BG3%; color: %ACC%; }
 QMenu::separator { height: 1px; background: %LINE%; margin: 4px 8px; }
@@ -260,6 +270,8 @@ QStatusBar::item { border: none; }
 QSplitter::handle { background: %LINE%; }
 QSplitter::handle:hover { background: %ACC%; }
 )QSS")
+        .replace("%CARDBG%", cardBg)
+        .replace("%BTNBG%", btnBg)
         .replace("%ACCSOFT3%", accSoft3)
         .replace("%ACCSOFT2%", accSoft2)
         .replace("%ACCSOFT%", accSoft)

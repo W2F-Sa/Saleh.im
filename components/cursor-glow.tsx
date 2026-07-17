@@ -33,6 +33,13 @@ export function CursorGlow() {
         visible = true;
         el.style.opacity = "1";
       }
+      // soft per-card spotlight — trail the pointer inside any hovered .sheen card
+      const card = (e.target as HTMLElement | null)?.closest?.(".sheen") as HTMLElement | null;
+      if (card) {
+        const r = card.getBoundingClientRect();
+        card.style.setProperty("--mx", `${((e.clientX - r.left) / r.width) * 100}%`);
+        card.style.setProperty("--my", `${((e.clientY - r.top) / r.height) * 100}%`);
+      }
     };
     const onLeave = () => {
       visible = false;

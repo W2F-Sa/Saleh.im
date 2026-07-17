@@ -8,8 +8,15 @@
 #pragma once
 #include <QDialog>
 #include <QString>
+#include <QVector>
 
+#include "browserimport.hpp"
 #include "vault.hpp"
+
+class QLineEdit;
+class QVBoxLayout;
+class QLabel;
+class QCheckBox;
 
 // Visual palette gallery. Live-previews on hover/selection and returns the id.
 class ThemePickerDialog : public QDialog {
@@ -52,6 +59,28 @@ class AboutDialog : public QDialog {
     Q_OBJECT
 public:
     explicit AboutDialog(QWidget* parent = nullptr);
+};
+
+// Discover, search, categorise and import saved browser logins.
+class BrowserImportDialog : public QDialog {
+    Q_OBJECT
+public:
+    explicit BrowserImportDialog(QWidget* parent = nullptr);
+    QVector<bimport::Credential> selected() const { return chosen_; }
+
+private:
+    struct Row { class QWidget* w; QCheckBox* cb; bimport::Credential cred; QString hay; };
+    void rescan();
+    void rebuild();
+    void applyFilter();
+    QVector<bimport::Credential> all_;
+    QVector<Row> rows_;
+    QVector<bimport::Credential> chosen_;
+    QLineEdit* search_ = nullptr;
+    QVBoxLayout* listLayout_ = nullptr;
+    QLabel* status_ = nullptr;
+    QString methodFilter_ = "all";
+    QString query_;
 };
 
 // Create / rename / re-icon / delete folders.

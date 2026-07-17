@@ -56,6 +56,51 @@ static QString entryIcon(const vault::Entry& e) {
     return e.iconEmoji.isEmpty() ? vault::typeIcon(e.type) : e.iconEmoji;
 }
 
+// Crisp monochrome line-icons painted with QPainter — a professional,
+// theme-tintable alternative to emoji in the toolbar.
+static QIcon lineIcon(const QString& name, const QColor& color, int px = 18) {
+    QPixmap pm(px, px);
+    pm.fill(Qt::transparent);
+    QPainter g(&pm);
+    g.setRenderHint(QPainter::Antialiasing);
+    QPen pen(color, 1.7);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    g.setPen(pen);
+    g.setBrush(Qt::NoBrush);
+    const qreal s = px;
+    auto line = [&](qreal x1, qreal y1, qreal x2, qreal y2) { g.drawLine(QPointF(x1 * s, y1 * s), QPointF(x2 * s, y2 * s)); };
+    auto dot = [&](qreal x, qreal y, qreal r) { g.setBrush(color); g.drawEllipse(QPointF(x * s, y * s), r * s, r * s); g.setBrush(Qt::NoBrush); };
+    if (name == "command") {
+        QPainterPath p; p.addRoundedRect(QRectF(0.12 * s, 0.12 * s, 0.76 * s, 0.76 * s), 0.16 * s, 0.16 * s); g.drawPath(p);
+        line(0.32, 0.36, 0.46, 0.5); line(0.46, 0.5, 0.32, 0.64); line(0.54, 0.64, 0.7, 0.64);
+    } else if (name == "dice") {
+        QPainterPath p; p.addRoundedRect(QRectF(0.14 * s, 0.14 * s, 0.72 * s, 0.72 * s), 0.18 * s, 0.18 * s); g.drawPath(p);
+        dot(0.34, 0.34, 0.05); dot(0.66, 0.34, 0.05); dot(0.5, 0.5, 0.05); dot(0.34, 0.66, 0.05); dot(0.66, 0.66, 0.05);
+    } else if (name == "chart") {
+        g.setBrush(color); g.setPen(Qt::NoPen);
+        auto bar = [&](qreal x, qreal top) { QPainterPath p; p.addRoundedRect(QRectF(x * s, top * s, 0.16 * s, (0.84 - top) * s), 0.03 * s, 0.03 * s); g.drawPath(p); };
+        bar(0.16, 0.52); bar(0.42, 0.28); bar(0.68, 0.42);
+    } else if (name == "shield") {
+        QPainterPath p; p.moveTo(0.5 * s, 0.12 * s); p.lineTo(0.84 * s, 0.24 * s); p.lineTo(0.84 * s, 0.5 * s);
+        p.quadTo(0.84 * s, 0.78 * s, 0.5 * s, 0.9 * s); p.quadTo(0.16 * s, 0.78 * s, 0.16 * s, 0.5 * s);
+        p.lineTo(0.16 * s, 0.24 * s); p.closeSubpath(); g.drawPath(p);
+    } else if (name == "dots") {
+        dot(0.24, 0.5, 0.07); dot(0.5, 0.5, 0.07); dot(0.76, 0.5, 0.07);
+    } else if (name == "lock") {
+        QPainterPath p; p.addRoundedRect(QRectF(0.22 * s, 0.44 * s, 0.56 * s, 0.44 * s), 0.09 * s, 0.09 * s); g.drawPath(p);
+        QPainterPath a; a.moveTo(0.32 * s, 0.44 * s); a.lineTo(0.32 * s, 0.34 * s);
+        a.arcTo(QRectF(0.32 * s, 0.16 * s, 0.36 * s, 0.36 * s), 180, -180); a.lineTo(0.68 * s, 0.44 * s); g.drawPath(a);
+        dot(0.5, 0.63, 0.045);
+    } else if (name == "browser") {
+        g.drawEllipse(QRectF(0.14 * s, 0.14 * s, 0.72 * s, 0.72 * s));
+        line(0.14, 0.5, 0.86, 0.5);
+        QPainterPath m; m.moveTo(0.5 * s, 0.14 * s); m.quadTo(0.28 * s, 0.5 * s, 0.5 * s, 0.86 * s); m.quadTo(0.72 * s, 0.5 * s, 0.5 * s, 0.14 * s); g.drawPath(m);
+    }
+    g.end();
+    return QIcon(pm);
+}
+
 MainWindow::MainWindow(const QString& path, const QString& password, const QByteArray& keyfile,
                        const QString& kdfPreset, const vault::Data& data, QWidget* parent)
     : QMainWindow(parent), path_(path), password_(password), keyfile_(keyfile),
@@ -207,31 +252,38 @@ void MainWindow::buildUi() {
     top->addWidget(newBtn);
     fx::pulseGlow(newBtn, QColor(theme::accent(data_.settings.theme)), 8, 24, 2400);
 
-    auto ghost = [&](const QString& glyph, const QString& tip, auto slot) {
-        auto* b = new QPushButton(glyph, mid);
+    const QColor icoCol(theme::paletteFor(data_.settings.theme).fg2);
+    auto tbtn = [&](const QString& icon, const QString& label, const QString& tip, auto slot) {
+        auto* b = new QPushButton("  " + label, mid);
+        b->setIcon(lineIcon(icon, icoCol, 17));
         b->setToolTip(tip);
         connect(b, &QPushButton::clicked, this, slot);
         top->addWidget(b);
+        toolIcons_.append({b, icon});
         return b;
     };
-    ghost("⌘K", "Command palette (Ctrl+K)", [this] { openCommandPalette(); });
-    ghost("🎲", "Generator (Ctrl+G)", [this] { openGenerator(); });
-    ghost("📊", "Dashboard", [this] { openStats(); });
-    ghost("🛡", "Security audit", [this] { openAudit(); });
+    tbtn("command", "Palette", "Command palette (Ctrl+K)", [this] { openCommandPalette(); });
+    tbtn("dice", "Generate", "Password generator (Ctrl+G)", [this] { openGenerator(); });
+    tbtn("chart", "Stats", "Dashboard (Ctrl+D)", [this] { openStats(); });
+    tbtn("shield", "Audit", "Security audit", [this] { openAudit(); });
 
-    auto* moreBtn = new QPushButton("⋯", mid);
+    auto* moreBtn = new QPushButton("  More", mid);
+    moreBtn->setIcon(lineIcon("dots", icoCol, 17));
     moreBtn->setToolTip("More");
+    toolIcons_.append({moreBtn, "dots"});
     auto* moreMenu = new QMenu(moreBtn);
-    moreMenu->addAction("Import items…", this, [this] { importItems(); });
+    moreMenu->addAction("Import from browsers…", this, [this] { importFromBrowsers(); });
+    moreMenu->addAction("Import file…", this, [this] { importItems(); });
     moreMenu->addAction("Export items…", this, [this] { exportItems(); });
     moreMenu->addSeparator();
     moreMenu->addAction("Choose theme…", this, [this] { pickTheme(); });
+    moreMenu->addAction("Manage folders…", this, &MainWindow::manageFolders);
     moreMenu->addAction("Settings", this, [this] { openSettings(); });
     moreMenu->addAction("About Vault", this, [this] { openAbout(); });
     moreBtn->setMenu(moreMenu);
     top->addWidget(moreBtn);
 
-    ghost("🔒", "Lock (Ctrl+L)", [this] { lock(); });
+    tbtn("lock", "Lock", "Lock (Ctrl+L)", [this] { lock(); });
     mv->addLayout(top);
 
     crumbLabel_ = new QLabel(mid);
@@ -284,7 +336,8 @@ void MainWindow::buildMenuBar() {
         newMenu->addAction(ty.icon + "  " + ty.label, this, [this, id] { newEntry(id); });
     }
     file->addSeparator();
-    file->addAction("Import…", this, [this] { importItems(); });
+    file->addAction("Import from browsers…", this, [this] { importFromBrowsers(); });
+    file->addAction("Import file…", this, [this] { importItems(); });
     file->addAction("Export…", this, [this] { exportItems(); });
     file->addAction("Encrypted backup…", this, &MainWindow::exportBackup);
     file->addSeparator();
@@ -614,6 +667,7 @@ void MainWindow::showDetail(const QString& id) {
         struct QA { QString label; std::function<void()> fn; };
         QVector<QA> actions = {
             {"🔑  New login", [this] { newEntry("login"); }},
+            {"🌐  Import browser logins", [this] { importFromBrowsers(); }},
             {"🎲  Generator", [this] { openGenerator(); }},
             {"📊  Dashboard", [this] { openStats(); }},
             {"🛡  Security audit", [this] { openAudit(); }},
@@ -974,7 +1028,8 @@ void MainWindow::openCommandPalette() {
     items.append({"action", "audit", "Security audit", "", "🛡"});
     items.append({"action", "stats", "Dashboard", "Vault statistics & health", "📊"});
     items.append({"action", "theme", "Choose theme", "Change the colour palette", "🎨"});
-    items.append({"action", "import", "Import items", "", "📥"});
+    items.append({"action", "import-browsers", "Import browser logins", "Chrome · Brave · Edge · Firefox", "🌐"});
+    items.append({"action", "import", "Import from file", "JSON / CSV", "📥"});
     items.append({"action", "export", "Export items", "", "📤"});
     items.append({"action", "settings", "Settings", "", "⚙"});
     items.append({"action", "lock", "Lock vault", "", "🔒"});
@@ -1003,6 +1058,7 @@ void MainWindow::openCommandPalette() {
             else if (id == "audit") openAudit();
             else if (id == "stats") openStats();
             else if (id == "theme") pickTheme();
+            else if (id == "import-browsers") importFromBrowsers();
             else if (id == "import") importItems();
             else if (id == "export") exportItems();
             else if (id == "settings") openSettings();
@@ -1034,6 +1090,31 @@ void MainWindow::importItems() {
     rebuildSidebar();
     rebuildList();
     QMessageBox::information(this, "Import", QString("Imported %1 item(s).").arg(imported.size()));
+}
+
+void MainWindow::importFromBrowsers() {
+    BrowserImportDialog d(this);
+    if (d.exec() != QDialog::Accepted) return;
+    const QVector<bimport::Credential> creds = d.selected();
+    if (creds.isEmpty()) return;
+    int n = 0;
+    for (const auto& c : creds) {
+        vault::Entry e = vault::newEntry("login");
+        e.title = c.site.isEmpty() ? c.origin : c.site;
+        e.url = c.origin;
+        e.username = c.username;
+        e.password = c.password;
+        const QString method = bimport::methodLabel(c.method);
+        e.tags = QStringList{"imported", c.browser.toLower(), bimport::methodKey(c.method)};
+        e.notes = QString("Imported from %1 · sign-in: %2").arg(c.browser, method);
+        e.customFields.append({"Sign-in", method + (c.provider.isEmpty() ? QString() : " (" + c.provider + ")"), false});
+        data_.entries.prepend(e);
+        n++;
+    }
+    persist();
+    rebuildSidebar();
+    rebuildList();
+    QMessageBox::information(this, "Import", QString("Imported %1 login(s) from your browsers.").arg(n));
 }
 
 void MainWindow::exportItems() {
@@ -1169,6 +1250,9 @@ void MainWindow::bumpUsed(const QString& id) {
 
 void MainWindow::applyTheme(const QString& id) {
     qApp->setStyleSheet(theme::qss(id));
+    const QColor ic(theme::paletteFor(id).fg2);
+    for (const auto& t : toolIcons_)
+        if (t.first) t.first->setIcon(lineIcon(t.second, ic, 17));
 }
 
 // ---------------------------------------------------------------------------

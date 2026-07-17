@@ -421,22 +421,23 @@ body {
     will-change: transform;
   }
   .elev:hover {
-    transform: translateY(-5px);
+    transform: translateY(-4px);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.07),
-      0 4px 10px -3px var(--shadow),
-      0 20px 40px -16px var(--shadow),
-      0 48px 90px -28px var(--shadow),
-      0 0 70px -32px var(--glow);
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 3px 8px -3px var(--shadow),
+      0 16px 34px -16px var(--shadow),
+      0 40px 74px -32px var(--shadow),
+      0 0 44px -34px var(--glow);
   }
   /* opt-in hover lift for cards that aren't full .elev panels */
   .lift {
-    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease;
+    transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.45s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.4s ease;
     will-change: transform;
   }
   .lift:hover {
     transform: translateY(-4px);
-    box-shadow: 0 24px 48px -22px var(--shadow), 0 0 50px -30px var(--glow);
+    border-color: color-mix(in srgb, var(--accent) 26%, var(--line-2));
+    box-shadow: 0 20px 44px -26px var(--shadow), 0 0 40px -34px var(--glow);
   }
 }
 
@@ -529,11 +530,12 @@ body::before {
   }
 }
 
-/* Marquee */
+/* Marquee — force LTR so the seamless -50% loop never breaks in RTL pages */
 .marquee {
   display: inline-flex;
   white-space: nowrap;
   will-change: transform;
+  direction: ltr;
   animation: slide 40s linear infinite;
 }
 .marquee.rev {
@@ -583,7 +585,9 @@ body::before {
   transform-origin: left;
 }
 
-/* Tilt card sheen */
+/* Soft cursor-follow spotlight — the primary premium hover accent.
+   --mx / --my are updated per-card by cursor-glow.tsx as the pointer moves,
+   so the light gently trails the cursor inside the card. Very subtle. */
 .sheen {
   position: relative;
   overflow: hidden;
@@ -592,14 +596,16 @@ body::before {
   content: "";
   position: absolute;
   inset: 0;
+  border-radius: inherit;
   background: radial-gradient(
-    260px circle at var(--px, 50%) var(--py, 50%),
+    420px circle at var(--mx, 50%) var(--my, 50%),
     color-mix(in srgb, var(--accent) 12%, transparent),
     transparent 60%
   );
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
+  z-index: 0;
 }
 .sheen:hover::before {
   opacity: 1;
@@ -702,7 +708,8 @@ textarea,
   color: var(--fg);
 }
 
-/* Gradient hairline that appears on card hover (premium edge light) */
+/* Soft edge-light on hover — a single, gentle accent hairline (not a rainbow).
+   Kept subtle so it reads as a quiet highlight, never a garish outline. */
 .glow-border {
   position: relative;
 }
@@ -712,16 +719,16 @@ textarea,
   inset: 0;
   border-radius: inherit;
   padding: 1px;
-  background: linear-gradient(135deg, var(--accent), transparent 40%, transparent 60%, var(--accent-2));
+  background: linear-gradient(150deg, color-mix(in srgb, var(--accent) 60%, transparent), transparent 45%);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   opacity: 0;
-  transition: opacity 0.35s ease;
+  transition: opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
 }
 .glow-border:hover::before {
-  opacity: 0.7;
+  opacity: 0.35;
 }
 
 /* Keyboard key hint */
@@ -981,20 +988,20 @@ a:hover > .logo-mark,
     0 1px 2px -1px var(--shadow),
     0 8px 18px -12px var(--shadow),
     0 22px 44px -26px var(--shadow);
-  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 0.3s ease;
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.4s ease;
   will-change: transform;
 }
 .card-lift:hover {
-  transform: translateY(-6px);
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--line-2));
+  transform: translateY(-4px);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line-2));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 6px 14px -6px var(--shadow),
-    0 26px 52px -20px var(--shadow),
-    0 50px 100px -40px var(--shadow),
-    0 0 60px -26px var(--glow);
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 4px 12px -6px var(--shadow),
+    0 20px 44px -22px var(--shadow),
+    0 42px 84px -44px var(--shadow),
+    0 0 44px -32px var(--glow);
 }
 
 /* --- CSS-only interactive 3D tilt (leans away from the top on hover) --- */
@@ -1023,29 +1030,12 @@ a:hover > .logo-mark,
   .gradient-text { animation: none; }
 }
 
-/* --- Sweeping shine highlight for any surface --- */
+/* --- Shine (legacy): the old diagonal sweep read as cheap, so it's retired.
+   Kept as a class (with clipping) for compatibility; the refined hover now
+   comes from the soft lift + .sheen spotlight instead. --- */
 .shine {
   position: relative;
   overflow: hidden;
-  isolation: isolate;
-}
-.shine::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background: linear-gradient(
-    115deg,
-    transparent 30%,
-    color-mix(in srgb, var(--fg) 10%, transparent) 48%,
-    transparent 66%
-  );
-  transform: translateX(-140%);
-  transition: transform 0.75s cubic-bezier(0.16, 1, 0.3, 1);
-  pointer-events: none;
-}
-.shine:hover::after {
-  transform: translateX(140%);
 }
 
 /* --- Frosted glass panel (great over aurora / imagery) --- */

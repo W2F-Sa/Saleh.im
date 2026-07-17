@@ -37,6 +37,13 @@ fields** (any label/value, optionally hidden) on every item.
   digit/symbol constraints and a recent-results history.
 - **Trash** (soft delete → restore or delete-forever, Empty Trash).
 - **Folder manager** (create/rename/re-icon/delete), tags, favorites.
+- **Browser import** — scans Chrome, Chromium, Brave, Edge, Vivaldi, Opera and
+  Firefox for saved logins and shows, per site, **how you sign in** ("Sign in
+  with Google / GitHub / Microsoft…", or a username + password), the
+  **username**, and the **password** when the system keyring permits decryption
+  (Linux `v10/v11` AES‑128‑CBC scheme; locked entries are clearly marked, never
+  guessed). Search, filter by method and import straight into the vault. Reads a
+  private snapshot of the browser's login DB — nothing is written back.
 - **Import** (JSON + generic/browser CSV) and **Export** (JSON / CSV) plus
   fully **encrypted backups**.
 - **Password history** (browse / copy / restore previous passwords).
@@ -74,8 +81,11 @@ Uninstall: `sudo apt remove saleh-vault`.
 
 ## Requirements
 
-- Ubuntu/Kubuntu: `build-essential cmake qt6-base-dev libsodium-dev`
-- Fedora: `gcc-c++ cmake qt6-qtbase-devel libsodium-devel rpm-build`
+- Ubuntu/Kubuntu: `build-essential cmake qt6-base-dev libsodium-dev libssl-dev`
+- Fedora: `gcc-c++ cmake qt6-qtbase-devel libsodium-devel openssl-devel rpm-build`
+- Runtime (browser import): Qt SQLite driver (ships with Qt) + OpenSSL; install
+  `libsecret-tools` (provides `secret-tool`) to unlock passwords stored behind
+  the GNOME/KDE keyring.
 
 Everything is local and open source. Your master password never leaves the
 machine.

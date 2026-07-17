@@ -1,6 +1,7 @@
 #include "extradialogs.hpp"
 
 #include <QButtonGroup>
+#include <QCheckBox>
 #include <QDateTime>
 #include <QDialogButtonBox>
 #include <QFrame>
@@ -424,6 +425,244 @@ void FolderManagerDialog::addRow(const vault::Folder& f) {
             if (items_[i].container == container) { items_.remove(i); break; }
         container->deleteLater();
     });
+}
+
+// ---------------------------------------------------------------------------
+//  BrowserImportDialog
+// ---------------------------------------------------------------------------
+static QColor browserColor(const QString& b) {
+    if (b.startsWith("Chrome")) return QColor("#4285f4");
+    if (b == "Chromium") return QColor("#5a8dee");
+    if (b == "Brave") return QColor("#fb542b");
+    if (b == "Edge") return QColor("#0c8ce9");
+    if (b == "Vivaldi") return QColor("#ef3939");
+    if (b == "Opera") return QColor("#ff1b2d");
+    if (b == "Firefox") return QColor("#ff7139");
+    return QColor("#8b929e");
+}
+static QColor methodColor(bimport::Method m) {
+    using M = bimport::Method;
+    switch (m) {
+        case M::Google: return QColor("#ea4335");
+        case M::GitHub: return QColor("#8b949e");
+        case M::Microsoft: return QColor("#00a4ef");
+        case M::Facebook: return QColor("#1877f2");
+        case M::Apple: return QColor("#a2aaad");
+        case M::Federated: return QColor("#a78bfa");
+        default: return QColor("#4ade80");
+    }
+}
+static QIcon browserBadge(const QString& browser) {
+    QPixmap pm(44, 30);
+    pm.fill(Qt::transparent);
+    QPainter g(&pm);
+    g.setRenderHint(QPainter::Antialiasing);
+    QPainterPath path;
+    path.addRoundedRect(1, 1, 42, 28, 8, 8);
+    QColor c = browserColor(browser);
+    g.fillPath(path, c);
+    g.setPen(Qt::white);
+    QFont f = g.font();
+    f.setPixelSize(15);
+    f.setBold(true);
+    g.setFont(f);
+    g.drawText(QRect(1, 1, 42, 28), Qt::AlignCenter, browser.left(1).toUpper());
+    g.end();
+    return QIcon(pm);
+}
+
+BrowserImportDialog::BrowserImportDialog(QWidget* parent) : QDialog(parent) {
+    setWindowTitle("Import browser logins");
+    setModal(true);
+    setMinimumSize(700, 640);
+    auto* root = new QVBoxLayout(this);
+
+    auto* title = new QLabel("Import browser logins", this);
+    title->setObjectName("h2");
+    root->addWidget(title);
+    auto* sub = new QLabel("Vault scans Chrome, Chromium, Brave, Edge, Vivaldi, Opera and Firefox for saved "
+                           "logins, shows how you sign in to each site (Google, GitHub, a password…), and lets "
+                           "you pull them into your vault. Everything happens locally.", this);
+    sub->setObjectName("muted");
+    sub->setWordWrap(true);
+    root->addWidget(sub);
+
+    // toolbar: search + rescan
+    auto* tb = new QHBoxLayout();
+    search_ = new QLineEdit(this);
+    search_->setPlaceholderText("Search sites or usernames…");
+    search_->setClearButtonEnabled(true);
+    connect(search_, &QLineEdit::textChanged, this, [this](const QString& t) { query_ = t.trimmed().toLower(); applyFilter(); });
+    tb->addWidget(search_, 1);
+    auto* selAll = new QPushButton("Select all", this);
+    selAll->setObjectName("chip");
+    connect(selAll, &QPushButton::clicked, this, [this] { for (auto& r : rows_) if (r.w->isVisible()) r.cb->setChecked(true); });
+    auto* selNone = new QPushButton("None", this);
+    selNone->setObjectName("chip");
+    connect(selNone, &QPushButton::clicked, this, [this] { for (auto& r : rows_) r.cb->setChecked(false); });
+    auto* rescanBtn = new QPushButton("↻ Rescan", this);
+    connect(rescanBtn, &QPushButton::clicked, this, [this] { rescan(); rebuild(); });
+    tb->addWidget(selAll);
+    tb->addWidget(selNone);
+    tb->addWidget(rescanBtn);
+    root->addLayout(tb);
+
+    // method filter chips
+    auto* chips = new QHBoxLayout();
+    chips->setSpacing(6);
+    auto* grp = new QButtonGroup(this);
+    grp->setExclusive(true);
+    struct F { const char* label; const char* key; };
+    const F filters[] = {{"All", "all"}, {"Password", "password"}, {"Google", "google"}, {"GitHub", "github"}, {"Microsoft", "microsoft"}, {"SSO", "sso"}};
+    for (const auto& f : filters) {
+        auto* c = new QPushButton(f.label, this);
+        c->setObjectName("chip");
+        c->setCheckable(true);
+        if (QString(f.key) == "all") c->setChecked(true);
+        QString key = f.key;
+        connect(c, &QPushButton::clicked, this, [this, key] { methodFilter_ = key; applyFilter(); });
+        grp->addButton(c);
+        chips->addWidget(c);
+    }
+    chips->addStretch();
+    root->addLayout(chips);
+
+    // list
+    auto* scroll = new QScrollArea(this);
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    auto* inner = new QWidget();
+    listLayout_ = new QVBoxLayout(inner);
+    listLayout_->setContentsMargins(0, 0, 0, 0);
+    listLayout_->setSpacing(6);
+    listLayout_->addStretch();
+    scroll->setWidget(inner);
+    root->addWidget(scroll, 1);
+
+    status_ = new QLabel(this);
+    status_->setObjectName("muted");
+    root->addWidget(status_);
+
+    auto* bb = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
+    auto* imp = bb->addButton("Import selected", QDialogButtonBox::AcceptRole);
+    imp->setObjectName("accent");
+    connect(bb, &QDialogButtonBox::accepted, this, [this] {
+        chosen_.clear();
+        for (const auto& r : rows_) if (r.cb->isChecked()) chosen_.append(r.cred);
+        accept();
+    });
+    connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    root->addWidget(bb);
+
+    rescan();
+    rebuild();
+    fx::popIn(this);
+}
+
+void BrowserImportDialog::rescan() {
+    all_.clear();
+    const QVector<bimport::Profile> profiles = bimport::detectProfiles();
+    int browsers = 0;
+    QString last;
+    for (const auto& p : profiles) {
+        QString note;
+        QVector<bimport::Credential> creds = bimport::readProfile(p, note);
+        all_ += creds;
+        if (p.browser != last) { browsers++; last = p.browser; }
+    }
+    if (all_.isEmpty())
+        status_->setText(profiles.isEmpty() ? "No supported browsers with saved logins were found."
+                                            : "Browsers were found, but no readable logins.");
+    else
+        status_->setText(QString("Found %1 login(s) across %2 profile(s). Firefox entries are NSS-encrypted (site only).")
+                             .arg(all_.size()).arg(profiles.size()));
+}
+
+void BrowserImportDialog::rebuild() {
+    // clear existing rows (keep the trailing stretch)
+    for (auto& r : rows_) r.w->deleteLater();
+    rows_.clear();
+    int insertAt = 0;
+    for (const auto& c : all_) {
+        auto* card = new QFrame();
+        card->setObjectName("card");
+        auto* h = new QHBoxLayout(card);
+        h->setContentsMargins(12, 9, 12, 9);
+        h->setSpacing(10);
+
+        auto* cb = new QCheckBox(card);
+        cb->setChecked(c.passwordKnown || !c.username.isEmpty());
+        h->addWidget(cb);
+
+        auto* badge = new QLabel(card);
+        badge->setPixmap(browserBadge(c.browser).pixmap(44, 30));
+        badge->setToolTip(c.browser);
+        h->addWidget(badge);
+
+        auto* mid = new QVBoxLayout();
+        mid->setSpacing(1);
+        auto* site = new QLabel(c.site.isEmpty() ? "—" : c.site, card);
+        site->setObjectName("h3");
+        auto* usr = new QLabel(c.username.isEmpty() ? "— no username —" : c.username, card);
+        usr->setObjectName("muted");
+        usr->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        mid->addWidget(site);
+        mid->addWidget(usr);
+        h->addLayout(mid, 1);
+
+        // method chip
+        QColor mc = methodColor(c.method);
+        auto* chip = new QLabel(bimport::methodLabel(c.method), card);
+        chip->setStyleSheet(QString("background:%1; color:%2; border-radius:999px; padding:3px 10px; font-size:11px; font-weight:700;")
+                                .arg(QString("rgba(%1,%2,%3,0.16)").arg(mc.red()).arg(mc.green()).arg(mc.blue()), mc.name()));
+        h->addWidget(chip);
+
+        // password state
+        if (c.method != bimport::Method::Password) {
+            auto* s = new QLabel("SSO", card);
+            s->setObjectName("muted");
+            h->addWidget(s);
+        } else if (c.passwordKnown) {
+            auto* val = new QLabel("••••••••", card);
+            val->setObjectName("mono");
+            val->setTextInteractionFlags(Qt::TextSelectableByMouse);
+            auto* eye = new QPushButton("👁", card);
+            eye->setObjectName("ghost");
+            eye->setFixedWidth(30);
+            QString pw = c.password;
+            connect(eye, &QPushButton::toggled, val, [val, pw](bool on) { val->setText(on ? pw : QString("•").repeated(qMax(6, qMin(14, pw.size())))); });
+            eye->setCheckable(true);
+            h->addWidget(val);
+            h->addWidget(eye);
+        } else {
+            auto* s = new QLabel("🔒 locked", card);
+            s->setStyleSheet("color:#eab308;");
+            s->setToolTip("Encrypted by the system keyring. Unlock your keyring (or install libsecret-tools) and rescan.");
+            h->addWidget(s);
+        }
+
+        listLayout_->insertWidget(insertAt++, card);
+        Row row;
+        row.w = card;
+        row.cb = cb;
+        row.cred = c;
+        row.hay = (c.site + " " + c.username + " " + c.browser + " " + bimport::methodLabel(c.method)).toLower();
+        rows_.append(row);
+    }
+    applyFilter();
+}
+
+void BrowserImportDialog::applyFilter() {
+    const QStringList terms = query_.split(' ', Qt::SkipEmptyParts);
+    int shown = 0;
+    for (auto& r : rows_) {
+        bool ok = true;
+        if (methodFilter_ != "all" && bimport::methodKey(r.cred.method) != methodFilter_) ok = false;
+        if (ok) for (const QString& t : terms) if (!r.hay.contains(t)) { ok = false; break; }
+        r.w->setVisible(ok);
+        if (ok) shown++;
+    }
+    if (!all_.isEmpty()) status_->setText(QString("Showing %1 of %2 login(s). Tick the ones to import.").arg(shown).arg(all_.size()));
 }
 
 QVector<vault::Folder> FolderManagerDialog::folders() const {

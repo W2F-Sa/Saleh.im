@@ -65,6 +65,26 @@ function Preview({ name, accent }: { name: string; accent: boolean }) {
         </div>
       </div>
     );
+  if (name === "Rift")
+    return (
+      <svg viewBox="0 0 100 100" className="h-full w-full">
+        {/* incoming enemies */}
+        {[[18, 20], [82, 26], [24, 78], [80, 74], [50, 12]].map(([x, y], i) => (
+          <g key={i} transform={`translate(${x} ${y})`}>
+            <path d="M0,-5 L4.5,4 L-4.5,4 Z" fill={stroke} opacity={0.55} />
+          </g>
+        ))}
+        {/* projectiles */}
+        {[[40, 40], [58, 46], [46, 60]].map(([x, y], i) => (
+          <circle key={i} cx={x} cy={y} r="1.6" fill={stroke} />
+        ))}
+        {/* core hexagon */}
+        <g transform="translate(50 50)">
+          <polygon points="0,-13 11,-6.5 11,6.5 0,13 -11,6.5 -11,-6.5" fill="none" stroke={stroke} strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
+          <circle cx="0" cy="0" r="4" fill={stroke} />
+        </g>
+      </svg>
+    );
   // Probe — concentric rings
   return (
     <svg viewBox="0 0 100 100" className="h-full w-full">

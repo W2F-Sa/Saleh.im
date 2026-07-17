@@ -15,6 +15,7 @@
 
 #include <cstdio>
 
+#include "browserimport.hpp"
 #include "commandpalette.hpp"
 #include "crypto.hpp"
 #include "dialogs.hpp"
@@ -40,6 +41,8 @@ static vault::Entry sample(const QString& type, const QString& title) {
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
     if (!vc::init()) { std::printf("sodium init failed\n"); return 2; }
+    std::printf("browser-crypto self-test: %s\n", bimport::selfTest() ? "OK" : "FAILED");
+    if (!bimport::selfTest()) return 3;
 
     vault::Data data;
     data.version = 2;
@@ -69,6 +72,7 @@ int main(int argc, char** argv) {
     (new ThemePickerDialog("carbon"))->show();
     (new PasswordHistoryDialog("Demo", {"a1b2c3d4", "z9y8x7w6"}))->show();
     (new AboutDialog())->show();
+    (new BrowserImportDialog())->show();
     (new GeneratorWidget(nullptr, true))->show();
 
     QVector<CommandPalette::Item> items = {{"action", "lock", "Lock", "", "🔒"},

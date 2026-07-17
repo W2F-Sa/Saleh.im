@@ -223,6 +223,20 @@ export type Project = {
 
 export const projects: Project[] = [
   {
+    name: "Rift",
+    title: { en: "Rift — Neon Arena Survival", fa: "ریفت — بقا در آوردگاهِ نئونی" },
+    description: {
+      en: "A fast, smooth browser game built on a hand-written Canvas engine — action meets strategy. Defend the Core, auto-blast escalating waves, collect salvage, spend it on a deep pool of upgrades, deploy sentry turrets and topple a boss at the end of every one of five sectors. 60fps particles, screen-shake and neon glow that adapt to the active theme.",
+      fa: "یک بازیِ مرورگریِ سریع و روان روی موتورِ Canvasِ دست‌نویس — تلاقیِ اکشن و استراتژی. از هسته دفاع کن، موج‌های فزاینده را منهدم کن، اسکراپ جمع کن و صرفِ ارتقاهای عمیق کن، توپخانه‌ی نگهبان مستقر کن و در پایانِ هرکدام از پنج سکتور یک باس را شکست بده. ذراتِ ۶۰fps، لرزشِ صفحه و درخششِ نئونی هماهنگ با پوسته‌ی فعال.",
+    },
+    tags: ["Canvas", "Game engine", "60fps", "Action", "Strategy"],
+    href: `${BASE_PATH}/rift/`,
+    year: "2026",
+    featured: true,
+    internal: true,
+    accent: true,
+  },
+  {
     name: "Forge",
     title: { en: "Forge — Developer Toolbox", fa: "فورج — جعبه‌ابزار توسعه‌دهنده" },
     description: {

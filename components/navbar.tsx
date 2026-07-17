@@ -59,9 +59,6 @@ export function Navbar() {
                 <span className="udl">{l.label}</span>
               </a>
             ))}
-            <a href="/forge" className="group ms-1 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm text-[var(--fg-2)] transition-all hover:-translate-y-0.5 hover:border-[var(--accent)] hover:text-[var(--accent)]" style={{ borderColor: "var(--line-2)" }}>
-              ⚒ Forge
-            </a>
           </div>
 
           <div className="flex items-center gap-2">

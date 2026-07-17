@@ -178,10 +178,6 @@ export function Hero() {
                   <path d="M7 17 17 7M8 7h9v9" />
                 </svg>
               </a>
-              <a href="/forge" className="btn btn-outline">
-                Forge
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M7 17 17 7M8 7h9v9" /></svg>
-              </a>
               <a href="#contact" className="btn btn-outline">{t.hero.sayHello}</a>
             </div>
           </div>

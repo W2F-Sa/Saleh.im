@@ -1,6 +1,8 @@
 #pragma once
 #include <QByteArray>
 #include <QMainWindow>
+#include <QPair>
+#include <QVector>
 
 #include "vault.hpp"
 
@@ -69,6 +71,7 @@ private:
     void openSettings();
     void pickTheme();
     void importItems();
+    void importFromBrowsers();
     void exportItems();
     void changeMaster();
     void exportBackup();
@@ -110,5 +113,6 @@ private:
     QString lastClip_;
     QLabel* totpLabel_ = nullptr;  // live code in the detail pane
     QString totpSecretForDetail_;
+    QVector<QPair<QPushButton*, QString>> toolIcons_;  // toolbar buttons → icon name (re-tinted on theme change)
     bool quitting_ = false;
 };

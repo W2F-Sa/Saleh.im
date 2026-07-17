@@ -12,7 +12,8 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Sql)
+find_package(OpenSSL REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SODIUM REQUIRED libsodium)
 
@@ -25,11 +26,12 @@ add_executable(saleh-vault
     src/dialogs.cpp
     src/extradialogs.cpp
     src/commandpalette.cpp
+    src/browserimport.cpp
     src/mainwindow.cpp
 )
 
 target_include_directories(saleh-vault PRIVATE ${SODIUM_INCLUDE_DIRS})
-target_link_libraries(saleh-vault PRIVATE Qt6::Widgets ${SODIUM_LIBRARIES})
+target_link_libraries(saleh-vault PRIVATE Qt6::Widgets Qt6::Sql OpenSSL::Crypto ${SODIUM_LIBRARIES})
 target_link_directories(saleh-vault PRIVATE ${SODIUM_LIBRARY_DIRS})
 target_compile_options(saleh-vault PRIVATE -Wall -Wextra ${SODIUM_CFLAGS_OTHER})
 
@@ -58,10 +60,11 @@ add_executable(vault-smoke EXCLUDE_FROM_ALL
     src/dialogs.cpp
     src/extradialogs.cpp
     src/commandpalette.cpp
+    src/browserimport.cpp
     src/mainwindow.cpp
 )
 target_include_directories(vault-smoke PRIVATE ${SODIUM_INCLUDE_DIRS})
-target_link_libraries(vault-smoke PRIVATE Qt6::Widgets ${SODIUM_LIBRARIES})
+target_link_libraries(vault-smoke PRIVATE Qt6::Widgets Qt6::Sql OpenSSL::Crypto ${SODIUM_LIBRARIES})
 target_link_directories(vault-smoke PRIVATE ${SODIUM_LIBRARY_DIRS})
 
 # ---- CPack: .deb -----------------------------------------------------------
@@ -78,7 +81,9 @@ set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "amd64")
 # Auto-resolve shared-library deps when dpkg-shlibdeps is available, plus a
 # sensible explicit floor.
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "libsodium23 | libsodium23t64, libqt6widgets6, libqt6gui6, libqt6core6")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libsodium23 | libsodium23t64, libqt6widgets6, libqt6gui6, libqt6core6, libqt6sql6, libssl3 | libssl3t64")
+# Optional: secret-tool (libsecret) lets us read browser keyring passwords.
+set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "libsecret-tools")
 # Cleanly supersede the old Electron-based package (same .desktop path).
 set(CPACK_DEBIAN_PACKAGE_CONFLICTS "saleh-vault-desktop")
 set(CPACK_DEBIAN_PACKAGE_REPLACES "saleh-vault-desktop")
