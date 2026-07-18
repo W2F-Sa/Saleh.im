@@ -1216,3 +1216,282 @@ a:hover > .logo-mark,
 .prose-forge hr { border: none; border-top: 1px solid var(--line-2); margin: 1.2em 0; }
 .prose-forge img { max-width: 100%; border-radius: 10px; }
 .prose-forge strong { font-weight: 700; }
+
+
+/* =========================================================================
+   ELECTRONICS — interactive 3D PCB  (compositor-first)
+   A tactile printed-circuit board rendered entirely in CSS 3D. The board
+   tilts with the pointer (transform only), parts sit on real translateZ
+   depth layers with layered shadows, and "current" flows along the copper
+   traces. Everything pauses when off-screen or when reduced-motion is set.
+   ========================================================================= */
+
+.pcb-stage {
+  perspective: 1300px;
+  perspective-origin: 50% 40%;
+}
+
+.pcb-board {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 18px;
+  transform-style: preserve-3d;
+  /* driven by the component; sensible resting pose as a fallback */
+  transform: rotateX(var(--rx, 15deg)) rotateY(var(--ry, -20deg));
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  /* deep, dark solder-mask with a soft radial sheen */
+  background:
+    radial-gradient(120% 90% at 25% 15%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 55%),
+    radial-gradient(140% 120% at 85% 100%, color-mix(in srgb, var(--accent-2) 14%, transparent), transparent 60%),
+    linear-gradient(155deg, #0d1512, #0a1a16 55%, #08120f);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, rgba(255, 255, 255, 0.08));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 0 60px rgba(0, 0, 0, 0.55),
+    0 2px 6px -2px var(--shadow),
+    0 30px 60px -24px var(--shadow),
+    0 60px 120px -50px rgba(0, 0, 0, 0.7);
+  will-change: transform;
+}
+.pcb-board.dragging { transition: none; cursor: grabbing; }
+
+/* copper hatch / silkscreen fill */
+.pcb-board::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--accent) 6%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 6%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
+  -webkit-mask-image: radial-gradient(120% 100% at 50% 50%, #000 60%, transparent 100%);
+  mask-image: radial-gradient(120% 100% at 50% 50%, #000 60%, transparent 100%);
+  opacity: 0.5;
+  transform: translateZ(1px);
+}
+
+/* moving specular sheen across the board */
+.pcb-board::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg, transparent 40%, rgba(255, 255, 255, 0.09) 50%, transparent 60%);
+  transform: translateZ(2px);
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+/* the SVG trace layer sits flat on the board */
+.pcb-traces {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: translateZ(2px);
+  overflow: visible;
+}
+.pcb-trace {
+  fill: none;
+  stroke: color-mix(in srgb, var(--accent) 34%, #3a4a44);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.pcb-flow {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  stroke-dasharray: 10 120;
+  filter: drop-shadow(0 0 4px var(--glow));
+  animation: pcbFlow 2.8s linear infinite;
+}
+@keyframes pcbFlow {
+  to { stroke-dashoffset: -130; }
+}
+
+/* a part that floats above the board on its own depth layer */
+.pcb-part {
+  position: absolute;
+  transform-style: preserve-3d;
+  border-radius: 4px;
+}
+
+/* IC / microcontroller */
+.pcb-chip {
+  background: linear-gradient(155deg, #23262b, #0e1013);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 6px 14px -4px rgba(0, 0, 0, 0.8);
+  transform: translateZ(22px);
+  display: grid;
+  place-items: center;
+  color: color-mix(in srgb, var(--accent) 70%, #cfd8d4);
+  font-family: var(--font-mono), monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+}
+.pcb-chip::before,
+.pcb-chip::after {
+  content: "";
+  position: absolute;
+  top: 18%;
+  bottom: 18%;
+  width: 4px;
+  background:
+    repeating-linear-gradient(#c9ccce 0 2px, transparent 2px 6px);
+  border-radius: 2px;
+}
+.pcb-chip::before { left: -4px; }
+.pcb-chip::after { right: -4px; }
+
+/* SMD capacitor / resistor block */
+.pcb-cap {
+  border-radius: 3px;
+  transform: translateZ(12px);
+  box-shadow: 0 4px 8px -3px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+/* electrolytic cap — little cylinder */
+.pcb-elec {
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #4a5560, #1c2228 70%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transform: translateZ(30px);
+  box-shadow: 0 10px 18px -6px rgba(0, 0, 0, 0.8);
+}
+.pcb-elec::after {
+  content: "";
+  position: absolute;
+  inset: 22%;
+  border-radius: 50%;
+  border-top: 2px solid rgba(255, 255, 255, 0.3);
+  border-left: 2px solid transparent;
+  transform: rotate(35deg);
+}
+
+/* blinking status LED */
+.pcb-led {
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translateZ(16px);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4), 0 0 10px 2px var(--glow);
+  animation: pcbLed 1.9s ease-in-out infinite;
+}
+@keyframes pcbLed {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4), 0 0 14px 4px var(--glow); }
+  50% { opacity: 0.35; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4), 0 0 4px 0 var(--glow); }
+}
+
+/* gold solder pad */
+.pcb-pad {
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #ffe9a8, #c8962e 65%, #8a6416);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.5);
+  transform: translateZ(4px);
+}
+
+/* pin header */
+.pcb-header {
+  background: #0a0c0e;
+  border-radius: 3px;
+  transform: translateZ(20px);
+  box-shadow: 0 6px 12px -4px rgba(0, 0, 0, 0.8);
+  display: grid;
+  grid-auto-flow: column;
+  gap: 3px;
+  padding: 3px;
+  align-items: center;
+  justify-content: center;
+}
+.pcb-header i {
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+  background: radial-gradient(circle at 40% 35%, #ffe9a8, #b9862a);
+}
+
+/* resistor with colour bands */
+.pcb-res {
+  border-radius: 3px;
+  background: linear-gradient(#d9c7a3, #b89f76);
+  transform: translateZ(14px);
+  box-shadow: 0 5px 10px -4px rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-inline: 5px;
+  overflow: hidden;
+}
+.pcb-res i { width: 2px; height: 100%; }
+
+.pcb-label {
+  position: absolute;
+  font-family: var(--font-mono), monospace;
+  font-size: 7px;
+  letter-spacing: 0.1em;
+  color: color-mix(in srgb, var(--accent) 55%, #93a09a);
+  transform: translateZ(2px);
+  text-transform: uppercase;
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+/* pause everything when the board is scrolled off-screen */
+.pcb-paused .pcb-flow,
+.pcb-paused .pcb-led {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pcb-board { transition: none; }
+  .pcb-flow, .pcb-led, .pcb-board::after { animation: none; }
+}
+
+/* =========================================================================
+   CERTIFICATES — foil badge shine
+   ========================================================================= */
+.cert-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 30% 25%, color-mix(in srgb, var(--accent) 28%, transparent), transparent 60%),
+    var(--bg-3);
+  border: 1px solid var(--line-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 18px -12px var(--shadow);
+  color: var(--accent);
+  overflow: hidden;
+}
+.cert-mark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 42%, color-mix(in srgb, #fff 40%, transparent) 50%, transparent 58%);
+  transform: translateX(-130%);
+  transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.cert-card:hover .cert-mark::after { transform: translateX(130%); }
+
+.cert-verified {
+  color: #22c55e;
+}
+[data-theme="paper"] .cert-verified,
+[data-theme="frost"] .cert-verified,
+[data-theme="rose"] .cert-verified,
+[data-theme="sand"] .cert-verified,
+[data-theme="mint"] .cert-verified { color: #15803d; }
+
+/* =========================================================================
+   PERFORMANCE — skip rendering + layout for far off-screen sections.
+   Progressive: browsers without support simply ignore it. A generous
+   intrinsic size keeps the scrollbar stable before a section is painted.
+   ========================================================================= */
+.cv-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 760px;
+}

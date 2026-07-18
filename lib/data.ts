@@ -422,3 +422,139 @@ export const timeline: TimelineItem[] = [
     },
   },
 ];
+
+
+/* ------------------------------------------------------------------ */
+/* ELECTRONICS & PCB                                                  */
+/* ------------------------------------------------------------------ */
+
+export type ElectronicsSkill = {
+  name: L10n;
+  /** honest self-rating (0–100) — this is a growing, hobby-level area */
+  level: number;
+  icon: string;
+  blurb: L10n;
+};
+
+export const electronics = {
+  tagline: {
+    en: "A hardware hobby I'm growing — where my software instincts meet copper, current and solder.",
+    fa: "یک سرگرمیِ سخت‌افزاری که دارم رشدش می‌دهم — جایی که غریزه‌ی نرم‌افزاری‌ام به مس و جریان و لحیم می‌رسد.",
+  } as L10n,
+  note: {
+    en: "Still early — I know the fundamentals and enjoy prototyping. Not a claim to be an EE, just genuine, hands-on curiosity.",
+    fa: "هنوز اولِ راهم — مبانی را بلدم و از پروتوتایپ‌کردن لذت می‌برم. ادعای مهندسِ برق‌بودن نیست؛ فقط کنجکاویِ واقعی و عملی.",
+  } as L10n,
+  skills: [
+    {
+      name: { en: "Schematic & Circuit Basics", fa: "مبانیِ مدار و شماتیک" },
+      level: 45,
+      icon: "circuit",
+      blurb: {
+        en: "Reading and drawing schematics — resistors, capacitors, diodes, transistors, voltage dividers and Ohm's law in practice.",
+        fa: "خواندن و کشیدنِ شماتیک — مقاومت، خازن، دیود، ترانزیستور، مقسم ولتاژ و قانون اهم در عمل.",
+      },
+    },
+    {
+      name: { en: "PCB Design (KiCad)", fa: "طراحیِ PCB (KiCad)" },
+      level: 38,
+      icon: "pcb",
+      blurb: {
+        en: "Turning a schematic into a routed two-layer board in KiCad — footprints, nets, ground pours and a clean silkscreen.",
+        fa: "تبدیلِ شماتیک به یک بردِ دولایه‌ی روت‌شده در KiCad — فوت‌پرینت، نت، پُرکردنِ زمین و سیلک‌اسکرینِ تمیز.",
+      },
+    },
+    {
+      name: { en: "Microcontrollers (Arduino / ESP32)", fa: "میکروکنترلر (آردوینو / ESP32)" },
+      level: 48,
+      icon: "chip",
+      blurb: {
+        en: "Where my coding pays off — GPIO, PWM, I²C/SPI sensors, and pushing sensor data to the web over Wi-Fi.",
+        fa: "جایی که کدنویسی‌ام به کار می‌آید — GPIO، PWM، سنسورهای I²C/SPI و فرستادنِ داده‌ی سنسور به وب روی وای‌فای.",
+      },
+    },
+    {
+      name: { en: "Soldering & Prototyping", fa: "لحیم‌کاری و پروتوتایپ" },
+      level: 42,
+      icon: "iron",
+      blurb: {
+        en: "Breadboarding, through-hole and basic SMD soldering, plus a multimeter and logic probe to actually debug the thing.",
+        fa: "بردبورد، لحیمِ سوراخ‌رفته و SMDِ پایه، به‌همراهِ مولتی‌متر و پروبِ منطقی برای عیب‌یابیِ واقعی.",
+      },
+    },
+  ] as ElectronicsSkill[],
+};
+
+/* ------------------------------------------------------------------ */
+/* CERTIFICATES                                                       */
+/* NOTE: These are EXAMPLE entries so the section renders beautifully. */
+/*       Replace them with your real, verifiable certificates — set    */
+/*       `url` to each credential's public verification link.          */
+/* ------------------------------------------------------------------ */
+
+export type Certificate = {
+  title: L10n;
+  issuer: string;
+  date: string;
+  /** public verification link — set this to the real credential URL */
+  url?: string;
+  credentialId?: string;
+  skills: string[];
+  /** short glyph shown on the card */
+  mark: string;
+  accent?: boolean;
+};
+
+export const certificates: Certificate[] = [
+  {
+    title: { en: "Responsive Web Design", fa: "طراحیِ وبِ ریسپانسیو" },
+    issuer: "freeCodeCamp",
+    date: "2023",
+    url: "https://www.freecodecamp.org/certification",
+    skills: ["HTML", "CSS", "Flexbox", "Grid", "a11y"],
+    mark: "◈",
+    accent: true,
+  },
+  {
+    title: { en: "JavaScript Algorithms & Data Structures", fa: "الگوریتم و ساختمان‌داده‌ی جاوااسکریپت" },
+    issuer: "freeCodeCamp",
+    date: "2023",
+    url: "https://www.freecodecamp.org/certification",
+    skills: ["JavaScript", "Algorithms", "OOP", "Recursion"],
+    mark: "λ",
+  },
+  {
+    title: { en: "CS50x — Introduction to Computer Science", fa: "CS50x — مقدمه‌ای بر علوم کامپیوتر" },
+    issuer: "Harvard / edX",
+    date: "2024",
+    url: "https://cs50.harvard.edu/x/",
+    skills: ["C", "Python", "SQL", "Data Structures"],
+    mark: "H",
+    accent: true,
+  },
+  {
+    title: { en: "Meta Front-End Developer", fa: "توسعه‌دهنده‌ی فرانت‌اندِ متا" },
+    issuer: "Meta / Coursera",
+    date: "2024",
+    url: "https://www.coursera.org/professional-certificates/meta-front-end-developer",
+    skills: ["React", "UX", "Version Control", "Testing"],
+    mark: "∞",
+  },
+  {
+    title: { en: "CCNA: Introduction to Networks", fa: "CCNA: مقدمه‌ای بر شبکه‌ها" },
+    issuer: "Cisco Networking Academy",
+    date: "2024",
+    url: "https://www.netacad.com/",
+    skills: ["TCP/IP", "Subnetting", "Routing", "Ethernet"],
+    mark: "⇄",
+    accent: true,
+  },
+  {
+    title: { en: "Introduction to Electronics", fa: "مقدمه‌ای بر الکترونیک" },
+    issuer: "Coursera",
+    date: "2025",
+    url: "https://www.coursera.org/learn/electronics",
+    skills: ["Circuits", "Diodes", "Transistors", "Op-amps"],
+    mark: "⚡",
+  },
+];

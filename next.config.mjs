@@ -7,14 +7,26 @@
  * loads instantly on repeat visits, including on mobile.
  */
 const IMMUTABLE = "public, max-age=31536000, immutable";
+const isProd = process.env.NODE_ENV === "production";
 
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   compress: true,
+  // Never ship readable source maps to the browser — the production bundle is
+  // minified by SWC and no original source is exposed. This is the single most
+  // effective (and performance-safe) way to keep the code from being read.
+  productionBrowserSourceMaps: false,
   images: {
     // The Cloudflare image optimizer isn't wired up; keep images raw & fast.
     unoptimized: true,
+  },
+  // Production hardening: strip all console.* (except errors) and React dev-only
+  // props (data-testid, etc.) so the shipped JS is smaller, faster and harder to
+  // read — without the runtime cost of heavy source obfuscation.
+  compiler: {
+    removeConsole: isProd ? { exclude: ["error"] } : false,
+    reactRemoveProperties: isProd,
   },
   // Trim the client bundle a touch.
   experimental: {

@@ -252,8 +252,8 @@ export function Terminal() {
   };
 
   return (
-    <section id="terminal" ref={sectionRef} className="relative scroll-mt-24 overflow-hidden py-24 sm:py-32">
-      <span className="section-index pointer-events-none absolute start-2 top-10 select-none sm:start-6" aria-hidden>05</span>
+    <section id="terminal" ref={sectionRef} className="cv-section relative scroll-mt-24 overflow-hidden py-24 sm:py-32">
+      <span className="section-index pointer-events-none absolute start-2 top-10 select-none sm:start-6" aria-hidden>07</span>
       <div className="pointer-events-none absolute end-[8%] top-1/3 h-72 w-72 rounded-full aurora floaty" style={{ background: "var(--accent)", opacity: 0.1 }} aria-hidden />
       <div className="wrap relative">
         <div className="grid gap-10 lg:grid-cols-12 lg:gap-8">

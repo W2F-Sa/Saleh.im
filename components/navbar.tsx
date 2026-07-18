@@ -14,10 +14,12 @@ export function Navbar() {
   const links = [
     { href: "#about", label: t.nav.about, n: "01" },
     { href: "#skills", label: t.nav.skills, n: "02" },
-    { href: "#work", label: t.nav.journey, n: "03" },
-    { href: "#projects", label: t.nav.work, n: "04" },
-    { href: "#terminal", label: t.nav.shell, n: "05" },
-    { href: "#contact", label: t.nav.contact, n: "06" },
+    { href: "#electronics", label: t.nav.electronics, n: "03" },
+    { href: "#certificates", label: t.nav.certs, n: "04" },
+    { href: "#work", label: t.nav.journey, n: "05" },
+    { href: "#projects", label: t.nav.work, n: "06" },
+    { href: "#terminal", label: t.nav.shell, n: "07" },
+    { href: "#contact", label: t.nav.contact, n: "08" },
   ];
 
   useEffect(() => {

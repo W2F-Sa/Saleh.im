@@ -52,7 +52,7 @@ export function Projects() {
   const rest = projects.filter((p) => !p.featured);
 
   return (
-    <section id="projects" className="relative scroll-mt-24 py-24 sm:py-32">
+    <section id="projects" className="cv-section relative scroll-mt-24 py-24 sm:py-32">
       <div className="wrap">
         <Reveal>
           <div className="flex flex-wrap items-end justify-between gap-4">

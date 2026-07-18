@@ -8,7 +8,7 @@ export function Experience() {
   const { t, lang } = useLang();
 
   return (
-    <section id="work" className="relative scroll-mt-24 py-24 sm:py-32">
+    <section id="work" className="cv-section relative scroll-mt-24 py-24 sm:py-32">
       <div className="absolute inset-0 blueprint opacity-60" aria-hidden />
       <div className="wrap relative">
         <Reveal>
