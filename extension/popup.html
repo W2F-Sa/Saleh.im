@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="popup.css" />
+    <title>Vault Capture</title>
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">
+        <span class="logo">V</span>
+        <div>
+          <div class="title">Vault Capture</div>
+          <div class="subtitle" id="count">0 saved logins</div>
+        </div>
+      </div>
+      <a class="open" id="openVault" href="https://saleh.im/vault" target="_blank" rel="noopener">Open Vault ↗</a>
+    </header>
+
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="Search sites or users…" />
+    </div>
+
+    <main id="list" class="list"></main>
+
+    <div id="empty" class="empty" hidden>
+      <div class="empty-icon">🔒</div>
+      <p class="empty-title">No logins captured yet</p>
+      <p class="empty-sub">Sign in on any website — your username &amp; password will appear here automatically.</p>
+    </div>
+
+    <footer class="foot">
+      <button id="exportJson" class="btn">Export JSON</button>
+      <button id="exportCsv" class="btn">Export CSV</button>
+      <button id="clear" class="btn danger">Clear all</button>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

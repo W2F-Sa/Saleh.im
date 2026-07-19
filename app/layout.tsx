@@ -6,6 +6,7 @@ import { LangProvider } from "@/components/lang-provider";
 import { NO_FLASH_SCRIPT } from "@/lib/themes";
 import { NO_FLASH_LANG } from "@/lib/i18n";
 import { PwaRegister } from "@/components/pwa-register";
+import { Preloader } from "@/components/preloader";
 
 /* ---- Latin type system ---- */
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
@@ -223,6 +224,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         ))}
       </head>
       <body className="grain antialiased">
+        <Preloader />
         <LangProvider>
           <ThemeProvider>{children}</ThemeProvider>
         </LangProvider>
