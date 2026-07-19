@@ -1768,59 +1768,128 @@ a:hover > .logo-mark,
 
 
 /* =========================================================================
-   MOBILE / TOUCH PERFORMANCE
-   Heavy blur filters, backdrop-filter and always-on repaint animations are
-   the main causes of slow loads and scroll jank on phones. For coarse
-   pointers we drop them entirely — the static look is preserved but the
-   compositor no longer has to repaint every frame while scrolling.
+   MOBILE / TOUCH PERFORMANCE (non-destructive)
+   The effects stay — they're part of the design — but on phones we make them
+   cheaper to composite so scrolling stays smooth: smaller blur radii (a big
+   blur texture is the expensive part, not the effect itself), GPU-isolated
+   layers via `contain`, and lighter backdrop-filter on the sticky chrome.
+   Nothing visual is switched off.
    ========================================================================= */
 @media (hover: none) and (pointer: coarse) {
-  /* backdrop-filter on sticky headers is the single worst scroll offender */
-  *,
-  *::before,
-  *::after {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
+  /* backdrop-filter is the worst scroll offender — keep the frosted look but
+     shrink the blur so the compositor does far less work each frame */
+  .glass {
+    backdrop-filter: blur(7px) saturate(1.25) !important;
+    -webkit-backdrop-filter: blur(7px) saturate(1.25) !important;
   }
 
-  /* film grain overlay: a full-screen fixed layer we don't need on mobile */
-  .grain::after { display: none !important; }
+  /* a 90px blur rasterises a huge texture; 46px looks the same at phone size
+     but is dramatically cheaper. The drift animation is transform-only (GPU)
+     so it can stay. */
+  .aurora { filter: blur(46px); }
 
-  /* auroras: kill the 90px animated blur, keep a faint static wash */
-  .aurora {
-    animation: none !important;
-    filter: blur(42px) !important;
-    opacity: 0.22 !important;
-  }
-
-  /* give frosted panels a solid-ish fallback now that blur is gone */
-  .glass { background: color-mix(in srgb, var(--bg) 90%, transparent) !important; }
-
-  /* stop all continuous / repaint-heavy animations */
-  .conic-sheen,
-  .gradient-text,
-  .gradient-text-anim,
-  .skill-card::before,
-  .meter-fill::after,
-  .holo-card::before,
-  .cred-sheen,
-  .pcb-poster,
-  .pulse-ring::before,
-  .animate-float,
-  .floaty,
-  .floaty-slow {
-    animation: none !important;
-  }
-
-  /* card tilt / spotlight are pointer-driven — make sure nothing lingers */
-  .skill-card,
-  .skill-card .skill-tilt { transform: none !important; }
-  .skill-card::before,
-  .sheen::before { opacity: 0 !important; }
-
-  /* trim layer-promotion hints so mobile GPUs don't run out of memory */
+  /* isolate the big animated / blurred layers so their repaints never
+     invalidate the rest of the page while scrolling */
   .aurora,
-  .marquee,
-  .floaty,
-  .floaty-slow { will-change: auto !important; }
+  .conic-sheen,
+  .holo-card,
+  .skill-card,
+  .cred-sheen { contain: layout paint style; }
+
+  /* the pointer-driven tilt never runs on touch anyway (guarded in JS) —
+     make sure no stale transform is left promoting a layer */
+  .skill-card .skill-tilt { transform: none; }
+}
+
+/* Give every below-the-fold section paint containment so off-screen work is
+   skipped — helps both phones and desktops without changing appearance. */
+.cv-section { contain-intrinsic-size: auto 700px; }
+
+
+/* =========================================================================
+   PRELOADER — full-screen branded loading curtain
+   ========================================================================= */
+.preloader {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.6s ease, visibility 0.6s ease;
+}
+.preloader--done {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.preloader__bg { position: absolute; inset: 0; pointer-events: none; }
+.preloader__aurora {
+  position: absolute;
+  width: 42vmax;
+  height: 42vmax;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.4;
+  animation: plDrift 9s ease-in-out infinite alternate;
+}
+.preloader__aurora--a { top: -12%; left: -10%; background: var(--accent); }
+.preloader__aurora--b { bottom: -14%; right: -12%; background: var(--accent-2); animation-delay: -4s; }
+@keyframes plDrift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(6%, 8%, 0) scale(1.12); }
+}
+
+.preloader__stack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 2rem;
+}
+.preloader__mark { position: relative; filter: drop-shadow(0 8px 24px var(--glow)); }
+.pl-ring--1 { transform-origin: 60px 60px; animation: plSpin 5.5s linear infinite; opacity: 0.6; }
+@keyframes plSpin { to { transform: rotate(360deg); } }
+.pl-ring--2 { transition: stroke-dashoffset 0.35s cubic-bezier(0.22, 1, 0.36, 1); filter: drop-shadow(0 0 6px var(--glow)); }
+.pl-monogram { font-family: var(--font-display), Georgia, serif; font-size: 44px; font-weight: 600; font-style: italic; }
+
+.preloader__brand { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; }
+.preloader__name {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  background: linear-gradient(100deg, var(--fg) 20%, var(--accent) 50%, var(--fg) 80%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: plShimmer 2.4s ease-in-out infinite;
+}
+@keyframes plShimmer { 0% { background-position: 120% 0; } 100% { background-position: -120% 0; } }
+.preloader__sub { font-size: 0.72rem; color: var(--fg-2); letter-spacing: 0.02em; }
+
+.preloader__bar {
+  margin-top: 0.35rem;
+  width: min(240px, 62vw);
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bg-3);
+  overflow: hidden;
+}
+.preloader__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 12px var(--glow);
+  transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.preloader__pct { font-size: 0.72rem; color: var(--fg-2); }
+
+@media (prefers-reduced-motion: reduce) {
+  .preloader__aurora, .pl-ring--1, .preloader__name { animation: none; }
 }

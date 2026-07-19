@@ -18,8 +18,28 @@
    • Offline navigation now falls back to "/" (the site shell) first, then
      "/vault", instead of always serving the vault. */
 
-const CACHE = "saleh-site-v4";
-const APP_SHELL = ["/", "/vault", "/manifest.webmanifest", "/icon.svg", "/favicon.svg"];
+const CACHE = "saleh-site-v5";
+// Precache the shell + every top-level route so repeat visits and offline use
+// are instant. Immutable /_next/static chunks are added lazily, cache-first.
+const APP_SHELL = [
+  "/",
+  "/vault",
+  "/forge",
+  "/aperture",
+  "/nota",
+  "/prism",
+  "/relay",
+  "/pulse",
+  "/probe",
+  "/lumen",
+  "/messenger",
+  "/rift",
+  "/vanguard",
+  "/download",
+  "/manifest.webmanifest",
+  "/icon.svg",
+  "/favicon.svg",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
