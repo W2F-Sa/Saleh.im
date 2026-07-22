@@ -21,7 +21,7 @@ export function Contact() {
             <div className="conic-sheen" aria-hidden style={{ opacity: 0.16 }} />
             <div className="pointer-events-none absolute -end-20 -top-20 h-64 w-64 rounded-full aurora floaty" style={{ background: "var(--accent)", opacity: 0.28 }} aria-hidden />
             <div className="pointer-events-none absolute -start-16 bottom-0 h-56 w-56 rounded-full aurora floaty-slow" style={{ background: "var(--accent-2)", opacity: 0.16 }} aria-hidden />
-            <span className="section-index pointer-events-none absolute end-4 top-2 select-none sm:end-8" aria-hidden>08</span>
+            <span className="section-index pointer-events-none absolute end-4 top-2 select-none sm:end-8" aria-hidden>06</span>
             <div className="relative">
               <p className="label">{t.contact.eyebrow}</p>
               <h2 className="display mt-4 max-w-3xl text-5xl leading-tight sm:text-7xl">

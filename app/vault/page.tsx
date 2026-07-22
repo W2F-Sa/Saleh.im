@@ -36,6 +36,7 @@ import { EntryEditor } from "@/components/vault/entry-editor";
 import { DetailView } from "@/components/vault/detail-view";
 import { TotpRing } from "@/components/vault/totp-ring";
 import { ImportModal } from "@/components/vault/import-modal";
+import { startExtensionBridge, type IncomingCred } from "@/lib/vault/extension-bridge";
 
 /* ============================================================================
    Vault — a zero-knowledge, eight-layer-encrypted secret manager. Everything
@@ -75,6 +76,7 @@ export default function VaultPage() {
   const [data, setData] = useState<VaultData | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [importInfo, setImportInfo] = useState("");
 
   useEffect(() => {
     setPhase(hasVault() ? "locked" : "onboard");
@@ -98,6 +100,62 @@ export default function VaultPage() {
     },
     [master, t.saveFailed]
   );
+
+  /* ---- browser-extension bridge: auto-import captured logins over an
+         encrypted (ECDH + AES-GCM) channel, then store them normally ---- */
+  const phaseRef = useRef(phase);
+  const dataRef = useRef(data);
+  const persistRef = useRef(persist);
+  phaseRef.current = phase;
+  dataRef.current = data;
+  persistRef.current = persist;
+  const pendingCreds = useRef<IncomingCred[]>([]);
+
+  const mergeCreds = useCallback((creds: IncomingCred[], current: VaultData): { next: VaultData; added: number } => {
+    const entries = [...current.entries];
+    let added = 0;
+    for (const c of creds) {
+      const url = c.url || "";
+      const username = c.username || "";
+      const dup = entries.some(
+        (x) => x.type === "login" && (x.url || "") === url && (x.username || "") === username && (x.password || "") === c.password,
+      );
+      if (dup) continue;
+      const e = newEntry("login");
+      e.title = (c.title || url || username || "Imported login").slice(0, 120);
+      e.username = username;
+      e.password = c.password;
+      e.url = url;
+      e.notes = "Auto-captured by the Vault Capture extension.";
+      entries.push(e);
+      added++;
+    }
+    return { next: added ? { ...current, entries } : current, added };
+  }, []);
+
+  const ingest = useCallback(
+    (creds: IncomingCred[]) => {
+      if (phaseRef.current === "unlocked" && dataRef.current) {
+        const { next, added } = mergeCreds(creds, dataRef.current);
+        if (added) {
+          persistRef.current(next);
+          setImportInfo(fa ? `${added} ورود از افزونه وارد و ذخیره شد` : `Imported ${added} login${added === 1 ? "" : "s"} from the extension`);
+          setTimeout(() => setImportInfo(""), 4500);
+        }
+      } else {
+        pendingCreds.current.push(...creds); // vault is locked — import after unlock
+      }
+    },
+    [mergeCreds, fa]
+  );
+
+  useEffect(() => startExtensionBridge(ingest), [ingest]);
+
+  useEffect(() => {
+    if (phase === "unlocked" && data && pendingCreds.current.length) {
+      ingest(pendingCreds.current.splice(0));
+    }
+  }, [phase, data, ingest]);
 
   const lock = useCallback(() => {
     setMaster(null);
@@ -164,6 +222,11 @@ export default function VaultPage() {
       {saveError && (
         <div className="fixed inset-x-0 top-16 z-50 mx-auto w-fit max-w-[92vw] animate-[fadeIn_.2s_ease] rounded-xl border px-4 py-2.5 text-sm shadow-xl" role="alert" style={{ borderColor: "color-mix(in srgb, #ef4444 45%, transparent)", background: "color-mix(in srgb, #ef4444 14%, var(--bg-2))", color: "#ef4444" }} onClick={() => setSaveError("")}>
           ⚠ {saveError}
+        </div>
+      )}
+      {importInfo && (
+        <div className="fixed inset-x-0 top-16 z-50 mx-auto flex w-fit max-w-[92vw] animate-[fadeIn_.2s_ease] items-center gap-2 rounded-xl border px-4 py-2.5 text-sm shadow-xl" role="status" style={{ borderColor: "color-mix(in srgb, var(--accent) 45%, transparent)", background: "color-mix(in srgb, var(--accent) 12%, var(--bg-2))", color: "var(--accent)" }} onClick={() => setImportInfo("")}>
+          <Icon name="lock" size={14} /> {importInfo}
         </div>
       )}
       {phase === "loading" && <div className="grid min-h-[70vh] place-items-center text-[var(--fg-2)]">…</div>}

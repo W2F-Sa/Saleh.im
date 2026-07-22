@@ -147,6 +147,17 @@ export default function RiftPage() {
   const [practiceMode, setPracticeMode] = useState(false);
   const [shopOfferIds, setShopOfferIds] = useState<string[]>([]);
 
+  // Rift is a keyboard/mouse desktop game — gate it so phones get a clear
+  // "open on a computer" screen instead of an unplayable canvas.
+  const [deviceOk, setDeviceOk] = useState<"checking" | "desktop" | "mobile">("checking");
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px) and (pointer: fine)");
+    const update = () => setDeviceOk(mq.matches ? "desktop" : "mobile");
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
   useEffect(() => saveProfile(profile), [profile]);
 
   const lifetimeScore = profile.bestScore; // used to gate hero/weapon unlocks — grows with best single-run score
@@ -186,6 +197,7 @@ export default function RiftPage() {
   }, []);
 
   useEffect(() => {
+    if (deviceOk !== "desktop") return; // never boot the engine on phones/tablets
     const canvas = canvasRef.current;
     if (!canvas) return;
     const g = new RiftGame(canvas, { onHud: setHud, onState: setGs, onRunEnd, onToast: setToast });
@@ -203,7 +215,7 @@ export default function RiftPage() {
     window.addEventListener("resize", onResize);
     return () => { ro.disconnect(); window.removeEventListener("resize", onResize); g.destroy(); gameRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [deviceOk]);
 
   const g = () => gameRef.current;
   const playing = gs === "playing" || gs === "paused" || gs === "shop";
@@ -270,6 +282,31 @@ export default function RiftPage() {
   return (
     <div className="relative h-[100dvh] w-full overflow-hidden select-none" style={{ background: "var(--bg)" }}>
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" />
+
+      {/* Desktop-only gate — Rift needs a keyboard + mouse */}
+      {deviceOk === "mobile" && (
+        <div className="absolute inset-0 z-[100] grid place-items-center p-6 text-center" style={{ background: "var(--bg)" }}>
+          <div className="pointer-events-none absolute -top-16 start-[-10%] h-72 w-72 rounded-full aurora" style={{ background: "var(--accent)", opacity: 0.18 }} aria-hidden />
+          <div className="pointer-events-none absolute bottom-[-10%] end-[-8%] h-72 w-72 rounded-full aurora" style={{ background: "var(--accent-2)", opacity: 0.16 }} aria-hidden />
+          <div className="relative w-full max-w-sm">
+            <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl border" style={{ borderColor: "var(--line-2)", background: "var(--bg-2)", color: "var(--accent)" }}>
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /></svg>
+            </div>
+            <h1 className="font-display mt-5 text-3xl font-semibold">
+              {lang === "fa" ? "روی کامپیوتر باز کن" : "Open this on a computer"}
+            </h1>
+            <p className="mt-3 leading-relaxed text-[var(--fg-2)]">
+              {lang === "fa"
+                ? "ریفت یک بازیِ آوردگاهی با کیبورد و موس است و برای اجرا به یک کامپیوترِ رومیزی یا لپ‌تاپ نیاز دارد. لطفاً این صفحه را روی سیستم باز کن."
+                : "Rift is a keyboard-and-mouse arena game and needs a desktop or laptop to play. Please open this page on a computer."}
+            </p>
+            <a href="/" className="btn btn-outline mt-6 inline-flex px-4 py-2 text-sm">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m15 18-6-6 6-6" /></svg>
+              {lang === "fa" ? "بازگشت به سایت" : "Back to saleh.im"}
+            </a>
+          </div>
+        </div>
+      )}
 
       {/* In-game status pills (only while playing). Kept below the menu
           overlays so they never fight for clicks. */}

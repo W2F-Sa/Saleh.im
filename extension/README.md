@@ -34,9 +34,17 @@ locally — nothing is sent anywhere.
 
 ## Getting them into Vault
 
-Open the popup and choose **Export CSV** (or **Export JSON**). The CSV uses the
-`name,url,username,password` header, which the Vault **Import & Detect** screen
-reads directly — open Vault, unlock, click **Import**, and drop the file in.
+**Automatic (recommended).** Just open [saleh.im/vault](https://saleh.im/vault)
+with the extension installed. A bridge content script runs only on the Vault
+site, performs an **ECDH (P-256) handshake** with the page and hands over every
+captured login **encrypted with AES-256-GCM** — the credentials are never
+posted in the clear. The Vault decrypts them, de-duplicates and **saves them
+automatically** (if the vault is locked, they're imported the moment you
+unlock). You'll see an "Imported N logins from the extension" confirmation.
+
+**Manual (optional).** You can also open the popup and choose **Export CSV** or
+**Export JSON**. The CSV uses the `name,url,username,password` header, which the
+Vault **Import & Detect** screen reads directly.
 
 ## Privacy
 

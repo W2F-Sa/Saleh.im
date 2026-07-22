@@ -15,7 +15,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/probe", priority: 0.8, freq: "monthly" },
     { path: "/lumen", priority: 0.8, freq: "monthly" },
     { path: "/forge", priority: 0.8, freq: "monthly" },
-    { path: "/vanguard", priority: 0.7, freq: "monthly" },
     { path: "/rift", priority: 0.7, freq: "monthly" },
     { path: "/aperture", priority: 0.7, freq: "monthly" },
     { path: "/prism", priority: 0.7, freq: "monthly" },
